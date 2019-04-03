@@ -7,7 +7,10 @@ setup(name='firexk-flame',
       author='Core FireX Team',
       author_email='firex-dev@gmail.com',
       license='BSD-3-Clause',
-      packages=['firexk_flame', ],
+      packages=['firex_flame', ],
       zip_safe=True,
       install_requires=["flask"
-      ],)
+      ],
+      entry_points={
+          'console_scripts': ['firex_flame = firex_flame.__main__:main', ]
+      },)
