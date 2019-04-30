@@ -1,16 +1,16 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
-setup(name='firexk-flame',
+setup(name='firex_flame',
       version="0.1",
       description='Core firex libraries',
       url='https://github.com/FireXStuff/firex-flame',
       author='Core FireX Team',
       author_email='firex-dev@gmail.com',
       license='BSD-3-Clause',
-      packages=['firex_flame', ],
+      packages=find_packages(),
       zip_safe=True,
-      install_requires=["flask"
-      ],
+      install_requires=["flask"],
       entry_points={
-          'console_scripts': ['firex_flame = firex_flame.__main__:main', ]
+          'console_scripts': ['firex_flame = firex_flame.__main__:main', ],
+          'firex_tracking_service': ['flame_launcher = firex_flame.launcher:FlameLauncher', ]
       },)
