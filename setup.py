@@ -9,7 +9,13 @@ setup(name='firex_flame',
       license='BSD-3-Clause',
       packages=find_packages(),
       zip_safe=True,
-      install_requires=["flask"],
+      install_requires=[
+            "flask",
+            "Flask-AutoIndex",
+      ],
+      package_data={
+        'firex_flame': ['ui/*.html', 'ui/js/*.js', 'ui/img/*', 'ui/css/*.css'],
+      },
       entry_points={
           'console_scripts': ['firex_flame = firex_flame.__main__:main', ],
           'firex_tracking_service': ['flame_launcher = firex_flame.launcher:FlameLauncher', ]
