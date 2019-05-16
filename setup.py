@@ -10,8 +10,10 @@ setup(name='firex_flame',
       packages=find_packages(),
       zip_safe=True,
       install_requires=[
-            "flask",
+            "Flask==0.12.1",
             "Flask-AutoIndex",
+            "python-socketio==2.0.0",
+            "eventlet==0.21.0",
       ],
       package_data={
         'firex_flame': ['ui/*.html', 'ui/js/*.js', 'ui/img/*', 'ui/css/*.css'],

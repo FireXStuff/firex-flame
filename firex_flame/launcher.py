@@ -1,3 +1,4 @@
+import os
 from socket import gethostname
 import subprocess
 
@@ -8,8 +9,9 @@ from firexapp.broker_manager.broker_factory import BrokerFactory
 from firexapp.common import get_available_port
 from firexapp.fileregistry import FileRegistry
 from firexapp.submit.tracking_service import TrackingService
+from firexapp.submit.console import setup_console_logging
 
-logger = get_task_logger(__name__)
+logger = setup_console_logging(__name__)
 
 
 def get_flame_url(port, hostname=gethostname()):
@@ -29,6 +31,7 @@ class FlameLauncher(TrackingService):
         # store sync & port state for later
         self.sync = args.sync
         self.port = int(port) if port else get_available_port()
+        rec_file = os.path.join(uid.logs_dir, 'flame2.rec')
 
         # assemble startup cmd
         cmd_args = {
@@ -36,7 +39,7 @@ class FlameLauncher(TrackingService):
             'broker': BrokerFactory.get_broker_url(),
             'uid': str(uid),
             'logs_dir': uid.logs_dir,
-            'recording': args.flame_record,
+            'recording': rec_file,
             'central_server': kwargs.get('central_firex_server', None),
         }
 
@@ -44,11 +47,11 @@ class FlameLauncher(TrackingService):
         cmd = 'firex_flame %s &' % ' '.join(non_empty_args_strs)
 
         # start the flame service and return the port
-        logger.debug("Starting Flame on %s..." % get_flame_url(self.port))
         logger.debug("Flame command: %s" % cmd)
         flame_stdout = FileRegistry().get_file(FLAME_LOG_REGISTRY_KEY, uid.logs_dir)
         with open(flame_stdout, 'wb') as out:
             subprocess.check_call(cmd, shell=True, stdout=out, stderr=subprocess.STDOUT)
+        logger.info('Flame: %s' % get_flame_url(self.port))
 
     # TODO: this mechanism is unreliable.
     def __del__(self):
