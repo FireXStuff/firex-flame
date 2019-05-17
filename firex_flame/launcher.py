@@ -2,8 +2,6 @@ import os
 from socket import gethostname
 import subprocess
 
-
-from celery.utils.log import get_task_logger
 from firex_flame import FLAME_LOG_REGISTRY_KEY
 from firexapp.broker_manager.broker_factory import BrokerFactory
 from firexapp.common import get_available_port

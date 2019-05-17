@@ -2,7 +2,7 @@ import logging
 import os
 
 from flask import Flask, Blueprint, redirect, send_from_directory, Response
-from flask.ext.autoindex import AutoIndexBlueprint
+from flask_autoindex import AutoIndexBlueprint
 
 
 logger = logging.getLogger(__name__)

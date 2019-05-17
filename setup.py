@@ -12,7 +12,7 @@ setup(name='firex_flame',
       packages=find_packages(),
       zip_safe=True,
       install_requires=[
-            "Flask==0.12.1",
+            "Flask==1.0.2",
             "Flask-AutoIndex",
             "python-socketio==2.0.0",
             "eventlet==0.21.0",
