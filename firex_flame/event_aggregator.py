@@ -63,8 +63,7 @@ def get_new_event_data(event):
         'name': lambda e: {'name': e['name'].split('.')[-1], 'long_name': e['name']},
         'type': lambda e: {
             'state': e['type'],
-            # TODO: run a task on a big run to see how much data this accumulates.
-            # 'states': [{'state': e['type'], 'timestamp': e['timestamp']}],
+            'states': [{'state': e['type'], 'timestamp': e.get('timestamp', None)}],
         } if e['type'] in state_types else {},
         'url': lambda e: {'logs_url': e['url']}, # TODO: for backwards compat. only. Can use log_filepath.
         'log_filepath': lambda e: {'logs_url': e['log_filepath']},

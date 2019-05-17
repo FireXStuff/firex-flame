@@ -35,7 +35,6 @@ def create_socketio_task_api(sio_server, tasks, run_metadata):
             'logs_dir': run_metadata['logs_dir'],
             'root_uuid': root_task.get('uuid', None),
             'chain': chain,
-            # TODO: receive this as an optional input arg and default to None.
             'centralServer': run_metadata['central_server'],
         }
         sio_server.emit('run-metadata', response, room=sid)

@@ -2,12 +2,13 @@ import unittest
 
 from firex_flame.event_aggregator import FlameEventAggregator
 
-basic_event = {'uuid': '1', 'name': 'prefix.SomeTask', 'type': 'task-started'}
+basic_event = {'uuid': '1', 'name': 'prefix.SomeTask', 'type': 'task-started', 'timestamp': 0}
 basic_event_added_fields = {
             'state': basic_event['type'],
             'long_name': basic_event['name'],
             'task_num': 1,
             'name': 'SomeTask',
+            'states': [{'state': 'task-started', 'timestamp': 0}],
         }
 
 
@@ -19,6 +20,7 @@ class EventAggregatorTests(unittest.TestCase):
         aggregator.aggregate_events([basic_event])
 
         expected_task = {**basic_event, **basic_event_added_fields}
+        expected_task.pop('timestamp')
         self.assertEqual({expected_task['uuid']: expected_task}, aggregator.tasks_by_uuid)
 
     def test_ignore_missing_uuid(self):
@@ -60,4 +62,22 @@ class EventAggregatorTests(unittest.TestCase):
 
         self.assertEqual({event1['uuid']: {'flame_data': expected_final_flame_data}}, changed_data)
         self.assertEqual(expected_final_flame_data, aggregator.tasks_by_uuid[event1['uuid']]['flame_data'])
+
+    def test_aggregate_states(self):
+        aggregator = FlameEventAggregator()
+
+        event1 = dict(basic_event)
+        events = [
+            event1,
+            {'uuid': event1['uuid'], 'type': 'task-blocked', 'timestamp': 1},
+            {'uuid': event1['uuid'], 'type': 'task-started', 'timestamp': 2},
+            {'uuid': event1['uuid'], 'type': 'task-succeeded', 'timestamp': 3},
+        ]
+
+        aggregator.aggregate_events(events)
+
+        aggregated_states = aggregator.tasks_by_uuid[event1['uuid']]['states']
+        expected_states = [{'state': e['type'], 'timestamp': e['timestamp']} for e in events]
+        print(aggregated_states)
+        self.assertEqual(expected_states, aggregated_states)
 
