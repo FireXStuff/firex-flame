@@ -7,7 +7,7 @@ import logging
 
 from flask import jsonify
 
-from firex_flame.event_aggregator import frontend_tasks_by_uuid
+from firex_flame.event_aggregator import frontend_tasks_by_uuid, INCOMPLETE_STATES
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ def create_socketio_task_api(sio_server, tasks, run_metadata):
     @sio_server.on('send-run-metadata')
     def emit_run_metadata(sid):
         """ Get static run-level data."""
-        # TODO: should cache once found. Should never change within a run.
+        # TODO: root is now captured in event_aggregator, refer to it here.
         root_task = next(filter(lambda n: n.get('parent_id', '__dont_match_default__') is None,
                                 tasks.values()),
                          {})
@@ -67,32 +67,28 @@ def create_rest_task_api(web_app, tasks):
 
 
 def create_revoke_api(sio_server, celery_app, tasks):
-    @sio_server.on('revoke-task')
-    def dummy_revoke_socket(sid, uuid):
-        """Get the desired task structure
 
-        Arguments:
-            sid: The session ID to use.
-            uuid(str): The uuid of the desired task to get details for.
-        """
+    @sio_server.on('revoke-task')
+    def socket_revoke_task(sid, uuid):
         response = _revoke_task(uuid)
         socket_event = 'revoke-success' if response else 'revoke-failed'
         sio_server.emit(socket_event, room=sid)
 
     def _revoke_task(uuid):
+        if uuid not in tasks:
+            return False
+
         # Get the task instance
         task = tasks[uuid]
 
-        in_progress_states = ['task-started', 'task-blocked']
-
         # Try to revoke the task
-        if uuid is not None and (task['type'] in in_progress_states):
+        if task['state'] in INCOMPLETE_STATES:
             celery_app.control.revoke(uuid, terminate=True)
 
         # Wait for the task to become revoked
         check_timeout = 5
         check = 1
-        while task['type'] in in_progress_states:
+        while task['state'] in INCOMPLETE_STATES:
             time.sleep(1)
             if check > check_timeout:
                 break
@@ -100,8 +96,4 @@ def create_revoke_api(sio_server, celery_app, tasks):
                 check += 1
 
         # If the task was successfully revoked, return true
-        if task['type'] in ['task-revoked', 'task-completed']:
-            return True
-
-        # If the task was not revoked, return none?
-        return None
+        return task['state'] == 'task-revoked'

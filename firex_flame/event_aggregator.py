@@ -50,7 +50,7 @@ STATE_TYPES = {
     'task-succeeded': {'terminal': True},
     'task-failed': {'terminal': True},
     'task-revoked': {'terminal': True},
-    'task-incomplete': {'terminal': True},  # server-side cludge state to fix tasks that will never complete.
+    'task-incomplete': {'terminal': True},  # server-side kludge state to fix tasks that will never complete.
     'task-unblocked': {'terminal': False},
 }
 COMPLETE_STATES = [s for s, v in STATE_TYPES.items() if v['terminal']]
