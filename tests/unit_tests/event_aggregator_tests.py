@@ -81,3 +81,12 @@ class EventAggregatorTests(unittest.TestCase):
         print(aggregated_states)
         self.assertEqual(expected_states, aggregated_states)
 
+    def test_capture_root(self):
+        aggregator = FlameEventAggregator()
+
+        event1 = {'parent_id': None, **basic_event}
+        event2 = {**event1, 'parent_id': event1['uuid']}
+
+        aggregator.aggregate_events([event1, event2])
+        self.assertEqual(event1['uuid'], aggregator.root_uuid)
+

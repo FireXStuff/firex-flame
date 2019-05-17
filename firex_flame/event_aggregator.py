@@ -43,6 +43,20 @@ def _deep_merge(dict1, dict2):
     return result
 
 
+STATE_TYPES = {
+    'task-received': {'terminal': False},
+    'task-blocked': {'terminal': False},
+    'task-started': {'terminal': False},
+    'task-succeeded': {'terminal': True},
+    'task-failed': {'terminal': True},
+    'task-revoked': {'terminal': True},
+    'task-incomplete': {'terminal': True},  # server-side cludge state to fix tasks that will never complete.
+    'task-unblocked': {'terminal': False},
+}
+COMPLETE_STATES = [s for s, v in STATE_TYPES.items() if v['terminal']]
+INCOMPLETE_STATES = [s for s, v in STATE_TYPES.items() if not v['terminal']]
+
+
 # Event data extraction/transformation without current state context.
 def get_new_event_data(event):
     new_task_data = {}
@@ -57,14 +71,12 @@ def get_new_event_data(event):
         if field in event:
             new_task_data[field] = event[field]
 
-    state_types = ['task-received', 'task-blocked', 'task-started', 'task-succeeded', 'task-shutdown',
-                   'task-failed', 'task-revoked', 'task-incomplete']
     fields_to_transforms = {
         'name': lambda e: {'name': e['name'].split('.')[-1], 'long_name': e['name']},
         'type': lambda e: {
             'state': e['type'],
             'states': [{'state': e['type'], 'timestamp': e.get('timestamp', None)}],
-        } if e['type'] in state_types else {},
+        } if e['type'] in STATE_TYPES else {},
         'url': lambda e: {'logs_url': e['url']}, # TODO: for backwards compat. only. Can use log_filepath.
         'log_filepath': lambda e: {'logs_url': e['log_filepath']},
         # Note first_started is never overwritten by downstream processing.
@@ -117,6 +129,7 @@ class FlameEventAggregator:
     def __init__(self):
         self.tasks_by_uuid = {}
         self.new_task_num = 1
+        self.root_uuid = None
 
     def aggregate_events(self, events):
         new_data_by_task_uuid = {}
@@ -129,10 +142,12 @@ class FlameEventAggregator:
         return new_data_by_task_uuid
 
     def generate_incomplete_events(self):
-        incomplete_task_types = ['task-blocked', 'task-started', 'task-unblocked', 'task-received']
         return [{'uuid': t['uuid'], 'type': 'task-incomplete'}
                 for t in self.tasks_by_uuid.values()
-                if t['type'] in incomplete_task_types]
+                if t['type'] in INCOMPLETE_STATES]
+
+    def is_root_complete(self):
+        return self.tasks_by_uuid.get(self.root_uuid, {'state': None})['state'] in COMPLETE_STATES
 
     def _get_or_create_task(self, task_uuid):
         if task_uuid not in self.tasks_by_uuid:
@@ -153,6 +168,9 @@ class FlameEventAggregator:
                 # revoked events can be sent before any other, and we'll never get any data (name, etc) for that task.
                 or (event['uuid'] not in self.tasks_by_uuid and event.get('type', '') == 'task-revoked')):
             return {}
+
+        if event.get('parent_id', '__no_match') is None and self.root_uuid is None:
+            self.root_uuid = event['uuid']
 
         new_data_by_task_uuid = get_new_event_data(event)
         result_by_uuid = {}

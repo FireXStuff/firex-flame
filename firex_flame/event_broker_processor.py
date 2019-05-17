@@ -22,7 +22,6 @@ class BrokerEventConsumerThread(threading.Thread):
         self.recording_file = recording_file
         self.flame_controller = flame_controller
         self.event_aggregator = event_aggregator
-        self.shutdown = False
 
     def run(self):
         self._run_from_broker()
@@ -31,7 +30,7 @@ class BrokerEventConsumerThread(threading.Thread):
         """Load the events from celery"""
         # Loop to receive the events from celery.
         try_interval = 1
-        while not self.shutdown:
+        while not self.event_aggregator.is_root_complete():
             try:
                 try_interval *= 2
                 with self.celery_app.connection() as conn:
@@ -51,12 +50,12 @@ class BrokerEventConsumerThread(threading.Thread):
                 logger.info('Exiting main thread')
                 thread.interrupt_main()
             except Exception:  # pylint: disable=broad-except
-                if self.shutdown:
+                if self.event_aggregator.is_root_complete():
                     return
                 logger.error(traceback.format_exc())
                 time.sleep(try_interval)
             finally:
-                if self.shutdown:
+                if self.event_aggregator.is_root_complete():
                     # Create new events that change the run state of incomplete events.
                     incomplete_task_events = self.event_aggregator.generate_incomplete_events()
                     self._aggregate_and_send(incomplete_task_events)
@@ -73,9 +72,6 @@ class BrokerEventConsumerThread(threading.Thread):
             with open(self.recording_file, "a") as rec:
                 event_line = json.dumps(event)
                 rec.write(event_line + "\n")
-
-        if event.get('type', None) == "task-shutdown":
-            self.shutdown = True
         self._aggregate_and_send([event])
 
     def _aggregate_and_send(self, events):
