@@ -1,7 +1,9 @@
 from setuptools import setup, find_packages
+import versioneer
 
 setup(name='firex_flame',
-      version="0.2",
+      version=versioneer.get_version(),
+      cmdclass=versioneer.get_cmdclass(),
       description='Core firex libraries',
       url='https://github.com/FireXStuff/firex-flame',
       author='Core FireX Team',
