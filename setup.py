@@ -16,6 +16,7 @@ setup(name='firex_flame',
             "Flask-AutoIndex",
             "python-socketio==2.0.0",
             "eventlet==0.21.0",
+            'firexapp',
       ],
       package_data={
         'firex_flame': ['ui/*.html', 'ui/js/*.js', 'ui/img/*', 'ui/css/*.css'],
