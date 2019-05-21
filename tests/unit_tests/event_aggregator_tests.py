@@ -85,7 +85,7 @@ class EventAggregatorTests(unittest.TestCase):
         aggregator = FlameEventAggregator()
 
         event1 = {'parent_id': None, **basic_event}
-        event2 = {**event1, 'parent_id': event1['uuid']}
+        event2 = {**event1, 'parent_id': event1['uuid'], 'uuid': 2}
 
         aggregator.aggregate_events([event1, event2])
         self.assertEqual(event1['uuid'], aggregator.root_uuid)

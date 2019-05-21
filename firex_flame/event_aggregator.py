@@ -73,12 +73,16 @@ def get_new_event_data(event):
 
     fields_to_transforms = {
         'name': lambda e: {'name': e['name'].split('.')[-1], 'long_name': e['name']},
+
         'type': lambda e: {
             'state': e['type'],
             'states': [{'state': e['type'], 'timestamp': e.get('timestamp', None)}],
         } if e['type'] in STATE_TYPES else {},
+
         'url': lambda e: {'logs_url': e['url']}, # TODO: for backwards compat. only. Can use log_filepath.
+
         'log_filepath': lambda e: {'logs_url': e['log_filepath']},
+
         # Note first_started is never overwritten by downstream processing.
         'local_received': lambda e: {'first_started': e['local_received']}
     }

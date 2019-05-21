@@ -12,29 +12,21 @@ from firex_flame.event_aggregator import frontend_tasks_by_uuid, INCOMPLETE_STAT
 logger = logging.getLogger(__name__)
 
 
-def create_socketio_task_api(sio_server, tasks, run_metadata):
+def create_socketio_task_api(sio_server, event_aggregator, run_metadata):
 
     @sio_server.on('send-graph-state')
     def emit_frontend_tasks_by_uuid(sid):
         """ Send the full state."""
-        sio_server.emit('graph-state', frontend_tasks_by_uuid(tasks), room=sid)
+        sio_server.emit('graph-state', frontend_tasks_by_uuid(event_aggregator.tasks_by_uuid), room=sid)
 
     @sio_server.on('send-run-metadata')
     def emit_run_metadata(sid):
         """ Get static run-level data."""
-        # TODO: root is now captured in event_aggregator, refer to it here.
-        root_task = next(filter(lambda n: n.get('parent_id', '__dont_match_default__') is None,
-                                tasks.values()),
-                         {})
-        if 'firex_bound_args' in root_task and 'chain' in root_task['firex_bound_args']:
-            chain = root_task['firex_bound_args']['chain']
-        else:
-            chain = None
         response = {
             'uid': run_metadata['uid'],
             'logs_dir': run_metadata['logs_dir'],
-            'root_uuid': root_task.get('uuid', None),
-            'chain': chain,
+            'root_uuid': event_aggregator.root_uuid,
+            'chain': run_metadata['chain'],
             'centralServer': run_metadata['central_server'],
         }
         sio_server.emit('run-metadata', response, room=sid)
@@ -49,13 +41,13 @@ def create_socketio_task_api(sio_server, tasks, run_metadata):
         """
         if isinstance(uuids, str):
             uuid = uuids
-            response = tasks.get(uuid, None)
+            response = event_aggregator.tasks_by_uuid.get(uuid, None)
             sio_server.emit('task-details-' + uuid, response, room=sid)
         else:
             if not isinstance(uuids, list):
                 response = []
             else:
-                response = [tasks.get(u, None) for u in uuids]
+                response = [event_aggregator.tasks_by_uuid.get(u, None) for u in uuids]
             sio_server.emit('task-details', response, room=sid)
 
 

@@ -34,7 +34,7 @@ def run_flame(broker, web_port, run_metadata, recording_file):
         thread = BrokerEventConsumerThread(celery_app, controller, event_aggregator, recording_file)
         create_revoke_api(sio_server, celery_app, event_aggregator.tasks_by_uuid)
 
-    create_socketio_task_api(sio_server, event_aggregator.tasks_by_uuid, run_metadata)
+    create_socketio_task_api(sio_server, event_aggregator, run_metadata)
     create_rest_task_api(web_app, event_aggregator.tasks_by_uuid)
     thread.start()
 
