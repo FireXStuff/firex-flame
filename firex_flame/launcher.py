@@ -37,6 +37,7 @@ class FlameLauncher(TrackingService):
             'broker': BrokerFactory.get_broker_url(),
             'uid': str(uid),
             'logs_dir': uid.logs_dir,
+            'chain': kwargs.get('chain', None),
             'recording': rec_file,
             'central_server': kwargs.get('central_firex_server', None),
         }
