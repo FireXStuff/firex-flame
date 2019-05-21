@@ -22,6 +22,7 @@ setup(name='firex_flame',
         'firex_flame': ['ui/*.html', 'ui/js/*.js', 'ui/img/*', 'ui/css/*.css'],
       },
       entry_points={
-          'console_scripts': ['firex_flame = firex_flame.__main__:main', ],
-          'firex_tracking_service': ['flame_launcher = firex_flame.launcher:FlameLauncher', ]
+          'console_scripts': ['firex_flame = firex_flame.__main__:main',
+                              'flame_dump = firex_flame.event_file_processor:dumper_main'],
+          'firex_tracking_service': ['flame_launcher = firex_flame.launcher:FlameLauncher', ],
       },)
