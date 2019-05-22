@@ -8,7 +8,7 @@ basic_event_added_fields = {
             'long_name': basic_event['name'],
             'task_num': 1,
             'name': 'SomeTask',
-            'states': [{'state': 'task-started', 'timestamp': 0}],
+            'states': [{'state': basic_event['type'], 'timestamp': basic_event['timestamp']}],
         }
 
 
@@ -90,3 +90,17 @@ class EventAggregatorTests(unittest.TestCase):
         aggregator.aggregate_events([event1, event2])
         self.assertEqual(event1['uuid'], aggregator.root_uuid)
 
+    def test_states_aggregated(self):
+        aggregator = FlameEventAggregator()
+
+        event2 = {**basic_event,
+                  'type': 'task-blocked',
+                  'timestamp': 1,
+                  }
+
+        aggregator.aggregate_events([basic_event, event2])
+        expected_states = [
+            {'state': basic_event['type'], 'timestamp': basic_event['timestamp']},
+            {'state': event2['type'], 'timestamp': event2['timestamp']},
+        ]
+        self.assertEqual(expected_states, aggregator.tasks_by_uuid[basic_event['uuid']]['states'])
