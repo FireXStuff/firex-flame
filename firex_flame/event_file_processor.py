@@ -15,9 +15,9 @@ def process_recording_file(event_aggregator, recording_file):
         if not event_line:
             continue
         event = json.loads(event_line)
-        # TODO: might need to do query-time task-type fixing, since here trailing in-progress tasks for which
-        # we don't received task-revoked will appear in progress.
         event_aggregator.aggregate_events([event])
+    # Kludge incomplete runstates that will never become terminal.
+    event_aggregator.aggregate_events(event_aggregator.generate_incomplete_events())
 
 
 def dumper_main():

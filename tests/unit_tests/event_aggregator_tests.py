@@ -78,7 +78,6 @@ class EventAggregatorTests(unittest.TestCase):
 
         aggregated_states = aggregator.tasks_by_uuid[event1['uuid']]['states']
         expected_states = [{'state': e['type'], 'timestamp': e['timestamp']} for e in events]
-        print(aggregated_states)
         self.assertEqual(expected_states, aggregated_states)
 
     def test_capture_root(self):

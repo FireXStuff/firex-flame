@@ -7,7 +7,7 @@ import logging
 
 from flask import jsonify
 
-from firex_flame.event_aggregator import frontend_tasks_by_uuid, INCOMPLETE_STATES
+from firex_flame.event_aggregator import slim_tasks_by_uuid, INCOMPLETE_STATES
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ def create_socketio_task_api(sio_server, event_aggregator, run_metadata):
     @sio_server.on('send-graph-state')
     def emit_frontend_tasks_by_uuid(sid):
         """ Send the full state."""
-        sio_server.emit('graph-state', frontend_tasks_by_uuid(event_aggregator.tasks_by_uuid), room=sid)
+        sio_server.emit('graph-state', slim_tasks_by_uuid(event_aggregator.tasks_by_uuid), room=sid)
 
     @sio_server.on('send-run-metadata')
     def emit_run_metadata(sid):
@@ -55,7 +55,7 @@ def create_rest_task_api(web_app, tasks):
 
     @web_app.route('/api/tasks')
     def all_tasks_by_uuid():
-        return jsonify(frontend_tasks_by_uuid(tasks))
+        return jsonify(slim_tasks_by_uuid(tasks))
 
 
 def create_revoke_api(sio_server, celery_app, tasks):

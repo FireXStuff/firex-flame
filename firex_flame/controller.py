@@ -3,7 +3,7 @@ import logging
 import os
 from pathlib import Path
 
-from firex_flame.event_aggregator import frontend_tasks_by_uuid
+from firex_flame.event_aggregator import slim_tasks_by_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ def dump_data_model(model_root_dir, tasks_by_uuid, run_metadata=None):
     full_tasks_dir = os.path.join(model_root_dir, 'full-tasks')
     os.makedirs(full_tasks_dir)
 
-    _write_json(os.path.join(model_root_dir, 'slim-tasks.json'), frontend_tasks_by_uuid(tasks_by_uuid))
+    _write_json(os.path.join(model_root_dir, 'slim-tasks.json'), slim_tasks_by_uuid(tasks_by_uuid))
     if run_metadata:
         _write_json(os.path.join(model_root_dir, 'run-metadata.json'), run_metadata)
 
@@ -35,7 +35,7 @@ class FlameAppController:
 
     def send_event(self, new_data_by_task_uuid):
         # Avoid sending events if there aren't fields the downstream cares about.
-        update_data_by_uuid = frontend_tasks_by_uuid(new_data_by_task_uuid)
+        update_data_by_uuid = slim_tasks_by_uuid(new_data_by_task_uuid)
         update_data_by_uuid = {uuid: task for uuid, task in update_data_by_uuid.items() if task}
         # Only emit frontend events when the data model has changed.
         if update_data_by_uuid:
