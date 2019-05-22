@@ -4,7 +4,7 @@ import versioneer
 setup(name='firex_flame',
       version=versioneer.get_version(),
       cmdclass=versioneer.get_cmdclass(),
-      description='Core firex libraries',
+      description='FireX event processor and web server.',
       url='https://github.com/FireXStuff/firex-flame',
       author='Core FireX Team',
       author_email='firex-dev@gmail.com',

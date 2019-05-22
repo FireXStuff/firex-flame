@@ -7,7 +7,6 @@ from threading import Timer
 
 from firex_flame.main_app import run_flame
 
-# TODO: configure logging.
 logger = logging.getLogger(__name__)
 
 

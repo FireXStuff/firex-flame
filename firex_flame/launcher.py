@@ -2,12 +2,15 @@ import os
 from socket import gethostname
 import subprocess
 
-from firex_flame import FLAME_LOG_REGISTRY_KEY
 from firexapp.broker_manager.broker_factory import BrokerFactory
 from firexapp.common import get_available_port
 from firexapp.fileregistry import FileRegistry
 from firexapp.submit.tracking_service import TrackingService
 from firexapp.submit.console import setup_console_logging
+from firexapp.submit.uid import Uid
+
+FLAME_LOG_REGISTRY_KEY = 'FLAME_OUTPUT_LOG_REGISTRY_KEY2'
+FileRegistry().register_file(FLAME_LOG_REGISTRY_KEY, os.path.join(Uid.debug_dirname, 'flame2.stdout'))
 
 logger = setup_console_logging(__name__)
 
