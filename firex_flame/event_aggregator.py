@@ -76,7 +76,7 @@ def get_new_event_data(event):
 
         'type': lambda e: {
             'state': e['type'],
-            'states': [{'state': e['type'], 'timestamp': e.get('timestamp', None)}],
+            # 'states': [{'state': e['type'], 'timestamp': e.get('timestamp', None)}],
         } if e['type'] in STATE_TYPES else {},
 
         'url': lambda e: {'logs_url': e['url']}, # TODO: for backwards compat. only. Can use log_filepath.
