@@ -16,8 +16,6 @@ from firex_flame.web_app import create_web_app
 
 logger = logging.getLogger(__name__)
 
-eventlet.monkey_patch()
-
 
 def run_flame(broker, web_port, run_metadata, recording_file):
     web_app = create_web_app(run_metadata['logs_dir'])

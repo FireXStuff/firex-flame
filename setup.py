@@ -15,7 +15,6 @@ setup(name='firex_flame',
             "Flask==1.0.2",
             "Flask-AutoIndex",
             "python-socketio==2.0.0",
-            "eventlet==0.21.0",
             'firexapp',
       ],
       package_data={

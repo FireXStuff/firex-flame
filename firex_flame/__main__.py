@@ -1,4 +1,5 @@
 import argparse
+import eventlet
 import logging
 import os
 import signal
@@ -8,6 +9,7 @@ from threading import Timer
 from firex_flame.main_app import run_flame
 
 logger = logging.getLogger(__name__)
+eventlet.monkey_patch()
 
 
 def _parse_args():
