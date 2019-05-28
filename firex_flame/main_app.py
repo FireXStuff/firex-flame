@@ -24,17 +24,17 @@ def run_flame(broker, web_port, run_metadata, recording_file):
 
     event_aggregator = FlameEventAggregator()
     if recording_file and os.path.isfile(recording_file):
-        thread = Thread(target=process_recording_file, args=(event_aggregator, recording_file))
+        event_recv_thread = Thread(target=process_recording_file, args=(event_aggregator, recording_file))
     else:
         assert broker, "Since recording file doesn't exist, the broker is required."
         celery_app = celery.Celery(broker=broker)
         controller = FlameAppController(sio_server, run_metadata)
-        thread = BrokerEventConsumerThread(celery_app, controller, event_aggregator, recording_file)
+        event_recv_thread = BrokerEventConsumerThread(celery_app, controller, event_aggregator, recording_file)
         create_revoke_api(sio_server, celery_app, event_aggregator.tasks_by_uuid)
 
     create_socketio_task_api(sio_server, event_aggregator, run_metadata)
     create_rest_task_api(web_app, event_aggregator.tasks_by_uuid)
-    thread.start()
+    event_recv_thread.start()
 
     try:
         eventlet.wsgi.server(eventlet.listen(('', web_port)), sio_web_app)
