@@ -1,11 +1,13 @@
 import logging
 import os
+import pkg_resources
 
 from flask import Flask, Blueprint, redirect, send_from_directory, Response
 from flask_autoindex import AutoIndexBlueprint
 
-
 logger = logging.getLogger(__name__)
+
+UI_RESOURCE_DIR = pkg_resources.resource_filename('firex_flame_ui', './')
 
 
 class FlameResponse(Response):
@@ -28,7 +30,7 @@ def create_web_app(logs_dir):
     web_app.add_url_rule('/', 'flame_ui', lambda: redirect("/ui/index.html", code=302))
 
     # Serve UI artifacts.
-    web_app.add_url_rule('/ui/<path:f>', 'ui_root', lambda f: send_from_directory(ui_root_dir, f))
+    web_app.add_url_rule('/ui/<path:f>', 'ui_root', lambda f: send_from_directory(UI_RESOURCE_DIR, f))
 
     # Add directory listings and file serve for logs.
     auto_index = Blueprint('auto_index', __name__)
