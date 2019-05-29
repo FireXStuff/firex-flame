@@ -19,6 +19,13 @@ def create_socketio_task_api(sio_server, event_aggregator, run_metadata):
         """ Send the full state."""
         sio_server.emit('graph-state', slim_tasks_by_uuid(event_aggregator.tasks_by_uuid), room=sid)
 
+    @sio_server.on('send-graph-fields')
+    def emit_task_fields_by_uuid(sid, fields):
+        """ Send the requested fields for all tasks."""
+        response = {uuid: {f: v for f, v in task.items() if f in fields}
+                    for uuid, task in event_aggregator.tasks_by_uuid.items()}
+        sio_server.emit('graph-fields', response, room=sid)
+
     @sio_server.on('send-run-metadata')
     def emit_run_metadata(sid):
         """ Get static run-level data."""
@@ -66,6 +73,16 @@ def create_revoke_api(sio_server, celery_app, tasks):
         socket_event = 'revoke-success' if response else 'revoke-failed'
         sio_server.emit(socket_event, room=sid)
 
+    def _wait_task_complete(task):
+        check_timeout = 5
+        check = 1
+        while task['state'] in INCOMPLETE_STATES:
+            time.sleep(1)
+            if check > check_timeout:
+                break
+            else:
+                check += 1
+
     def _revoke_task(uuid):
         if uuid not in tasks:
             return False
@@ -78,14 +95,7 @@ def create_revoke_api(sio_server, celery_app, tasks):
             celery_app.control.revoke(uuid, terminate=True)
 
         # Wait for the task to become revoked
-        check_timeout = 5
-        check = 1
-        while task['state'] in INCOMPLETE_STATES:
-            time.sleep(1)
-            if check > check_timeout:
-                break
-            else:
-                check += 1
+        _wait_task_complete(task)
 
         # If the task was successfully revoked, return true
         return task['state'] == 'task-revoked'

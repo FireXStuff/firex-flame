@@ -53,6 +53,7 @@ class FlameLauncher(TrackingService):
         flame_stdout = FileRegistry().get_file(FLAME_LOG_REGISTRY_KEY, uid.logs_dir)
         with open(flame_stdout, 'wb') as out:
             subprocess.check_call(cmd, shell=True, stdout=out, stderr=subprocess.STDOUT)
+        # TODO: wait for celery event listener and web server to both be up.
         logger.info('Flame: %s' % get_flame_url(self.port))
 
     # TODO: this mechanism is unreliable.
