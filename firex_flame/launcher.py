@@ -40,7 +40,7 @@ class FlameLauncher(TrackingService):
             'broker': BrokerFactory.get_broker_url(),
             'uid': str(uid),
             'logs_dir': uid.logs_dir,
-            'chain': kwargs.get('chain', None),
+            'chain': args.chain,
             'recording': rec_file,
             'central_server': kwargs.get('central_firex_server', None),
         }
@@ -49,7 +49,6 @@ class FlameLauncher(TrackingService):
         cmd = 'firex_flame %s &' % ' '.join(non_empty_args_strs)
 
         # start the flame service and return the port
-        logger.debug("Flame command: %s" % cmd)
         flame_stdout = FileRegistry().get_file(FLAME_LOG_REGISTRY_KEY, uid.logs_dir)
         with open(flame_stdout, 'wb') as out:
             subprocess.check_call(cmd, shell=True, stdout=out, stderr=subprocess.STDOUT)

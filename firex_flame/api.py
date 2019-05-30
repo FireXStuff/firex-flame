@@ -35,6 +35,7 @@ def create_socketio_task_api(sio_server, event_aggregator, run_metadata):
             'root_uuid': event_aggregator.root_uuid,
             'chain': run_metadata['chain'],
             'centralServer': run_metadata['central_server'],
+            'central_documentation_url': run_metadata['central_documentation_url'],
         }
         sio_server.emit('run-metadata', response, room=sid)
 

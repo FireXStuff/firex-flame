@@ -56,6 +56,7 @@ def _create_run_metadata(cli_args):
         'logs_dir': cli_args.logs_dir,
         'central_server': cli_args.central_server,
         'chain': cli_args.chain,
+        'central_documentation_url': 'http://www.firexapp.com/',
     }
 
 
