@@ -18,6 +18,7 @@ setup(name='firex_flame',
             'firexapp',
             "eventlet==0.21.0",
             "firex_flame_ui==0.4",
+            "requests",
       ],
       package_data={
         'firex_flame': ['ui/*.html', 'ui/js/*.js', 'ui/img/*', 'ui/css/*.css'],

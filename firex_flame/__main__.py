@@ -2,11 +2,13 @@ import argparse
 import eventlet
 import logging
 import os
+from pathlib import Path
 import signal
 import sys
 from threading import Timer
 
 from firex_flame.main_app import run_flame
+from firex_flame.flame_helper import get_flame_debug_dir, get_flame_pid_file_path
 
 logger = logging.getLogger(__name__)
 eventlet.monkey_patch()
@@ -39,8 +41,11 @@ def _exit_on_timeout():
 
 
 def _config_logging(root_logs_dir):
-    flame_logs_dir = os.path.join(root_logs_dir, 'debug', 'flame_server')
+    flame_logs_dir = get_flame_debug_dir(root_logs_dir)
     os.makedirs(flame_logs_dir, exist_ok=True)
+
+    Path(get_flame_pid_file_path(root_logs_dir)).write_text(str(os.getpid()))
+
     logging.basicConfig(
         filename=os.path.join(flame_logs_dir, 'flame.log'),
         format='[%(asctime)s][%(levelname)s][%(name)s]: %(message)s',
