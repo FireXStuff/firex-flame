@@ -1,6 +1,8 @@
 import os
 from socket import gethostname
 import subprocess
+import time
+import urllib.parse
 
 from firexapp.broker_manager.broker_factory import BrokerFactory
 from firexapp.common import get_available_port
@@ -9,7 +11,7 @@ from firexapp.submit.tracking_service import TrackingService
 from firexapp.submit.console import setup_console_logging
 from firexapp.submit.uid import Uid
 
-from firex_flame.flame_helper import DEFAULT_FLAME_TIMEOUT
+from firex_flame.flame_helper import DEFAULT_FLAME_TIMEOUT, wait_until_web_request_ok
 
 FLAME_LOG_REGISTRY_KEY = 'FLAME_OUTPUT_LOG_REGISTRY_KEY2'
 FileRegistry().register_file(FLAME_LOG_REGISTRY_KEY, os.path.join(Uid.debug_dirname, 'flame2.stdout'))
@@ -19,6 +21,14 @@ logger = setup_console_logging(__name__)
 
 def get_flame_url(port, hostname=gethostname()):
     return 'http://%s:%d' % (hostname, int(port))
+
+
+def _wait_web_server_alive(flame_url):
+    webserver_wait_timeout = 10
+    webserver_alive = wait_until_web_request_ok(urllib.parse.urljoin(flame_url, '/alive'),
+                                                timeout=webserver_wait_timeout)
+    if not webserver_alive:
+        raise Exception("Flame web server at %s not up after %s seconds." % (flame_url, webserver_wait_timeout))
 
 
 class FlameLauncher(TrackingService):
@@ -55,8 +65,11 @@ class FlameLauncher(TrackingService):
         flame_stdout = FileRegistry().get_file(FLAME_LOG_REGISTRY_KEY, uid.logs_dir)
         with open(flame_stdout, 'wb') as out:
             subprocess.check_call(cmd, shell=True, stdout=out, stderr=subprocess.STDOUT)
-        # TODO: wait for celery event listener and web server to both be up.
-        logger.info('Flame: %s' % get_flame_url(self.port))
+        # TODO: also wait for celery event listener be up.
+        flame_url = get_flame_url(self.port)
+        _wait_web_server_alive(flame_url)
+
+        logger.info('Flame: %s' % flame_url)
 
     # TODO: this mechanism is unreliable.
     def __del__(self):

@@ -32,6 +32,9 @@ def create_web_app(logs_dir):
     # Serve UI artifacts.
     web_app.add_url_rule('/ui/<path:f>', 'ui_root', lambda f: send_from_directory(UI_RESOURCE_DIR, f))
 
+    # Trivial 'OK' endpoint
+    web_app.add_url_rule('/alive', 'alive', lambda: ('', 200))
+
     # Add directory listings and file serve for logs.
     auto_index = Blueprint('auto_index', __name__)
     AutoIndexBlueprint(auto_index, browse_root=logs_dir)

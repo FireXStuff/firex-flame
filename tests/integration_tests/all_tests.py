@@ -5,11 +5,12 @@ import psutil
 import signal
 import time
 import requests
+import urllib.parse
 
 from firexapp.testing.config_base import FlowTestConfiguration, assert_is_good_run
 from firexapp.submit.submit import get_log_dir_from_output
 
-from firex_flame.flame_helper import get_flame_pid
+from firex_flame.flame_helper import get_flame_pid, wait_until_pid_not_exist
 
 
 def flame_url_from_output(cmd_output):
@@ -23,6 +24,7 @@ def kill_flame(log_dir, sig=signal.SIGKILL):
     flame_pid = get_flame_pid(log_dir)
     if psutil.pid_exists(flame_pid):
         os.kill(flame_pid, sig)
+        wait_until_pid_not_exist(flame_pid)
     return flame_pid
 
 
@@ -32,6 +34,7 @@ class FlameFlowTestConfiguration(FlowTestConfiguration):
     def assert_expected_firex_output(self, cmd_output, cmd_err):
         log_dir = get_log_dir_from_output(cmd_output)
         flame_url = flame_url_from_output(cmd_output)
+        assert flame_url, "Found no Flame URL in cmd_output"
         try:
             self.assert_on_flame_url(log_dir, flame_url)
         finally:
@@ -54,15 +57,17 @@ class FlameLaunchesTest(FlameFlowTestConfiguration):
         super().__init__()
 
     def initial_firex_options(self) -> list:
-        return ["submit", "--chain", self.chain, '--sync']
+        return ["submit", "--chain", self.chain]
 
     def assert_on_flame_url(self, log_dir, flame_url):
         assert get_flame_pid(log_dir) > 0, "Found no pid: %s" % get_flame_pid(log_dir)
 
-        main_page_request = requests.get(flame_url)
+        alive_url = urllib.parse.urljoin(flame_url, '/alive')
+        alive_request = requests.get(alive_url)
+        assert alive_request.ok, 'Expected OK response when fetching alive resource page: %s' % alive_url
 
-        assert main_page_request.status_code == 200, \
-            'Unexpected response code when fetching main page: %s' % main_page_request.status_code
+        root_request = requests.get(flame_url)
+        assert root_request.ok, 'Expected OK response when fetching main page: %s' % root_request.status_code
         # TODO: could query for all linked resources to make sure their accessible, but that might be overkill.
 
         tasks_api_request = requests.get(flame_url + '/api/tasks')
@@ -79,7 +84,7 @@ class FlameTimeoutShutdownTest(FlameFlowTestConfiguration):
         super().__init__()
 
     def initial_firex_options(self) -> list:
-        return ["submit", "--chain", 'nop', '--sync', '--flame_timeout', str(self.flame_timeout)]
+        return ["submit", "--chain", 'nop', '--flame_timeout', str(self.flame_timeout)]
 
     def assert_on_flame_url(self, log_dir, flame_url):
         time.sleep(self.flame_timeout + 1)
@@ -91,13 +96,12 @@ class FlameSigtermShutdownTest(FlameFlowTestConfiguration):
     """ Flame shutsdown cleanly when getting a sigterm."""
 
     def initial_firex_options(self) -> list:
-        return ["submit", "--chain", 'nop', '--sync']
+        return ["submit", "--chain", 'nop']
 
     def assert_on_flame_url(self, log_dir, flame_url):
         flame_pid = get_flame_pid(log_dir)
         assert psutil.pid_exists(flame_pid), "Flame pid should exist before being killed by SIGTERM."
         kill_flame(log_dir, sig=signal.SIGTERM)
-        time.sleep(2)
         assert not psutil.pid_exists(flame_pid), "SIGTERM should have caused flame to terminate, but pid still exists."
 
 
@@ -105,11 +109,10 @@ class FlameSigintShutdownTest(FlameFlowTestConfiguration):
     """ Flame shutsdown cleanly when getting a sigint."""
 
     def initial_firex_options(self) -> list:
-        return ["submit", "--chain", 'nop', '--sync']
+        return ["submit", "--chain", 'nop']
 
     def assert_on_flame_url(self, log_dir, flame_url):
         flame_pid = get_flame_pid(log_dir)
         assert psutil.pid_exists(flame_pid), "Flame pid should exist before being killed by SIGINT."
         kill_flame(log_dir, sig=signal.SIGINT)
-        time.sleep(2)
         assert not psutil.pid_exists(flame_pid), "SIGINT should have caused flame to terminate, but pid still exists."

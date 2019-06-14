@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 import signal
 import sys
-from threading import Timer
+import threading
 
 from firex_flame.main_app import run_flame
 from firex_flame.flame_helper import get_flame_debug_dir, get_flame_pid_file_path, DEFAULT_FLAME_TIMEOUT
@@ -45,8 +45,22 @@ def _exit_on_timeout():
     stop_main_thread()
 
 
+def _interrupt_main_thread():
+    try:
+        import _thread as thread
+    except ImportError:
+        # noinspection PyUnresolvedReferences
+        import thread
+    logger.info('Exiting main thread')
+    thread.interrupt_main()
+
+
 def stop_main_thread():
-    sys.exit(0)
+    if threading.current_thread() is threading.main_thread():
+        logger.info('sysexit from main thread')
+        sys.exit(0)
+    else:
+        _interrupt_main_thread()
 
 
 def _config_logging(root_logs_dir):
@@ -80,7 +94,7 @@ def main():
 
     signal.signal(signal.SIGTERM, _sigterm_handler)
     signal.signal(signal.SIGINT, _sigint_handler)
-    t = Timer(args.flame_timeout, _exit_on_timeout)
+    t = threading.Timer(args.flame_timeout, _exit_on_timeout)
     try:
         t.start()
         logger.info('Starting Flame Server with args: %s' % args)
