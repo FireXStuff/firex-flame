@@ -17,7 +17,7 @@ from firex_flame.web_app import create_web_app
 logger = logging.getLogger(__name__)
 
 
-def run_flame(broker, web_port, run_metadata, recording_file):
+def run_flame(broker, web_port, run_metadata, recording_file, broker_receiver_ready_file):
     web_app = create_web_app(run_metadata['logs_dir'])
     sio_server = socketio.Server()
     sio_web_app = socketio.Middleware(sio_server, web_app)
@@ -29,7 +29,11 @@ def run_flame(broker, web_port, run_metadata, recording_file):
         assert broker, "Since recording file doesn't exist, the broker is required."
         celery_app = celery.Celery(broker=broker)
         controller = FlameAppController(sio_server, run_metadata)
-        event_recv_thread = BrokerEventConsumerThread(celery_app, controller, event_aggregator, recording_file)
+        event_recv_thread = BrokerEventConsumerThread(celery_app,
+                                                      controller,
+                                                      event_aggregator,
+                                                      recording_file,
+                                                      broker_receiver_ready_file)
         create_revoke_api(sio_server, celery_app, event_aggregator.tasks_by_uuid)
 
     create_socketio_task_api(sio_server, event_aggregator, run_metadata)

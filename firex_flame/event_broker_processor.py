@@ -3,12 +3,15 @@ Process events from Celery in to flame data model.
 """
 
 import logging
+from pathlib import Path
 import threading
 import traceback
-
 import json
 import time
+
 from celery.events import EventReceiver
+
+from firex_flame.flame_helper import stop_main_thread
 
 logger = logging.getLogger(__name__)
 
@@ -16,12 +19,26 @@ logger = logging.getLogger(__name__)
 class BrokerEventConsumerThread(threading.Thread):
     """Events threading class
     """
-    def __init__(self, celery_app, flame_controller, event_aggregator, recording_file=None):
+    def __init__(self, celery_app, flame_controller, event_aggregator, recording_file=None, receiver_ready_file=None):
         threading.Thread.__init__(self)
         self.celery_app = celery_app
         self.recording_file = recording_file
         self.flame_controller = flame_controller
         self.event_aggregator = event_aggregator
+
+        if receiver_ready_file:
+            self.receiver_ready_file = Path(receiver_ready_file)
+            assert not self.receiver_ready_file.exists(), \
+                "Receiver ready file must not already exist: %s." % self.receiver_ready_file
+        else:
+            self.receiver_ready_file = None
+        self.is_first_receive = True
+
+    def _create_receiver_ready_file(self):
+        if self.is_first_receive:
+            if self.receiver_ready_file:
+                self.receiver_ready_file.touch()
+            self.is_first_receive = False
 
     def run(self):
         self._run_from_broker()
@@ -39,17 +56,12 @@ class BrokerEventConsumerThread(threading.Thread):
                                          handlers={"*": self._on_celery_event},
                                          app=self.celery_app)
                     try_interval = 1
+                    self._create_receiver_ready_file()
                     recv.capture(limit=None, timeout=None, wakeup=True)
             except (KeyboardInterrupt, SystemExit):
-                try:
-                    import _thread as thread
-                except ImportError:
-                    # noinspection PyUnresolvedReferences
-                    import thread
-                logger.info(traceback.format_exc())
-                logger.info('Exiting main thread')
-                thread.interrupt_main()
-            except Exception:  # pylint: disable=broad-except
+                stop_main_thread()
+            # pylint: disable=C0321
+            except Exception:
                 if self.event_aggregator.is_root_complete():
                     return
                 logger.error(traceback.format_exc())

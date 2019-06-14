@@ -4,11 +4,11 @@ import logging
 import os
 from pathlib import Path
 import signal
-import sys
 import threading
 
 from firex_flame.main_app import run_flame
-from firex_flame.flame_helper import get_flame_debug_dir, get_flame_pid_file_path, DEFAULT_FLAME_TIMEOUT
+from firex_flame.flame_helper import get_flame_debug_dir, get_flame_pid_file_path, DEFAULT_FLAME_TIMEOUT, \
+    stop_main_thread
 
 logger = logging.getLogger(__name__)
 eventlet.monkey_patch()
@@ -27,6 +27,8 @@ def _parse_args():
     parser.add_argument('--broker', help='Celery broker.', default=None)
     parser.add_argument('--flame_timeout', help='Maximum lifetime of this service, in seconds', type=int,
                         default=DEFAULT_FLAME_TIMEOUT)
+    parser.add_argument('--broker_recv_ready_file', help='File to create immediately before capturing celery events.',
+                        default=None)
     return parser.parse_args()
 
 
@@ -43,24 +45,6 @@ def _sigint_handler(_, __):
 def _exit_on_timeout():
     logger.info("Exiting on timeout")
     stop_main_thread()
-
-
-def _interrupt_main_thread():
-    try:
-        import _thread as thread
-    except ImportError:
-        # noinspection PyUnresolvedReferences
-        import thread
-    logger.info('Exiting main thread')
-    thread.interrupt_main()
-
-
-def stop_main_thread():
-    if threading.current_thread() is threading.main_thread():
-        logger.info('sysexit from main thread')
-        sys.exit(0)
-    else:
-        _interrupt_main_thread()
 
 
 def _config_logging(root_logs_dir):
@@ -98,7 +82,7 @@ def main():
     try:
         t.start()
         logger.info('Starting Flame Server with args: %s' % args)
-        run_flame(args.broker, args.port, _create_run_metadata(args), args.recording)
+        run_flame(args.broker, args.port, _create_run_metadata(args), args.recording, args.broker_recv_ready_file)
         t.cancel()
     except Exception as e:
         logger.exception(e)

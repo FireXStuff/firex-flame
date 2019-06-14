@@ -11,7 +11,8 @@ from firexapp.submit.tracking_service import TrackingService
 from firexapp.submit.console import setup_console_logging
 from firexapp.submit.uid import Uid
 
-from firex_flame.flame_helper import DEFAULT_FLAME_TIMEOUT, wait_until_web_request_ok
+from firex_flame.flame_helper import DEFAULT_FLAME_TIMEOUT, wait_until_web_request_ok, get_flame_debug_dir, \
+    wait_until_path_exist
 
 FLAME_LOG_REGISTRY_KEY = 'FLAME_OUTPUT_LOG_REGISTRY_KEY2'
 FileRegistry().register_file(FLAME_LOG_REGISTRY_KEY, os.path.join(Uid.debug_dirname, 'flame2.stdout'))
@@ -23,12 +24,24 @@ def get_flame_url(port, hostname=gethostname()):
     return 'http://%s:%d' % (hostname, int(port))
 
 
-def _wait_web_server_alive(flame_url):
+def wait_webserver_and_celery_recv_ready(flame_url, broker_recv_ready_file):
+    start_wait = time.perf_counter()
+
+    # Wait for web server via HTTP GET.
     webserver_wait_timeout = 10
     webserver_alive = wait_until_web_request_ok(urllib.parse.urljoin(flame_url, '/alive'),
                                                 timeout=webserver_wait_timeout)
     if not webserver_alive:
         raise Exception("Flame web server at %s not up after %s seconds." % (flame_url, webserver_wait_timeout))
+
+    # Wait for broker ready file to be created by flame.
+    celery_recvr_timeout = 10
+    broker_recv_ready = wait_until_path_exist(broker_recv_ready_file, timeout=celery_recvr_timeout)
+    if not broker_recv_ready:
+        raise Exception("Flame celery receiver not ready after %s seconds." % celery_recvr_timeout)
+
+    end_wait = time.perf_counter()
+    logger.info("Waited %.1f seconds for web server & celery receiver to become ready." % (end_wait - start_wait))
 
 
 class FlameLauncher(TrackingService):
@@ -45,6 +58,7 @@ class FlameLauncher(TrackingService):
         self.sync = args.sync
         self.port = int(port) if port else get_available_port()
         rec_file = os.path.join(uid.logs_dir, 'flame2.rec')
+        broker_recv_ready_file = os.path.join(get_flame_debug_dir(uid.logs_dir), 'celery_receiver_ready')
 
         # assemble startup cmd
         cmd_args = {
@@ -55,7 +69,8 @@ class FlameLauncher(TrackingService):
             'chain': args.chain,
             'recording': rec_file,
             'central_server': kwargs.get('central_firex_server', None),
-            'flame_timeout': args.flame_timeout
+            'flame_timeout': args.flame_timeout,
+            'broker_recv_ready_file': broker_recv_ready_file,
         }
 
         non_empty_args_strs = ['--%s %s' % (k, v) for k, v in cmd_args.items() if v]
@@ -67,7 +82,7 @@ class FlameLauncher(TrackingService):
             subprocess.check_call(cmd, shell=True, stdout=out, stderr=subprocess.STDOUT)
         # TODO: also wait for celery event listener be up.
         flame_url = get_flame_url(self.port)
-        _wait_web_server_alive(flame_url)
+        wait_webserver_and_celery_recv_ready(flame_url, broker_recv_ready_file)
 
         logger.info('Flame: %s' % flame_url)
 
