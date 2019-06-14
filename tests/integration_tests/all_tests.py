@@ -24,7 +24,7 @@ def kill_flame(log_dir, sig=signal.SIGKILL):
     flame_pid = get_flame_pid(log_dir)
     if psutil.pid_exists(flame_pid):
         os.kill(flame_pid, sig)
-        wait_until_pid_not_exist(flame_pid)
+        wait_until_pid_not_exist(flame_pid, timeout=30)
     return flame_pid
 
 
