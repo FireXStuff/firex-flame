@@ -17,7 +17,7 @@ setup(name='firex_flame',
             "python-socketio==2.0.0",
             'firexapp',
             "eventlet==0.21.0",
-            "firex_flame_ui==0.4",
+            "firex_flame_ui<0.21",
             "requests",
       ],
       package_data={
