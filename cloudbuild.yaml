@@ -10,7 +10,7 @@ steps:
 artifacts:
   objects:
     location: 'gs://firex_flame_build_logs'
-    paths: [$BUILD_ID/firex-flame/test_logs/*']
+    paths: ['$BUILD_ID/firex-flame/test_logs/*']
     
 secrets:
 - kmsKeyName: projects/firex-kit-documentation/locations/global/keyRings/secrets/cryptoKeys/TWINE_PASSWORD
