@@ -7,6 +7,11 @@ steps:
   dir: '$BUILD_ID/firex-flame'
   secretEnv: ['TWINE_PASSWORD']
 
+artifacts:
+  objects:
+    location: 'gs://firex_flame_build_logs'
+    paths: ['/tmp/*']
+    
 secrets:
 - kmsKeyName: projects/firex-kit-documentation/locations/global/keyRings/secrets/cryptoKeys/TWINE_PASSWORD
   secretEnv:
