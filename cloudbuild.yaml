@@ -3,14 +3,14 @@ steps:
   args: ['clone', 'https://github.com/FireXStuff/firex-flame.git']
   dir: '$BUILD_ID'
 - name: gcr.io/$PROJECT_ID/firex-alpine-build
-  args: ['sh', '-c', 'sudo pip3 install firexbuilder && firex-build all --sudo --output_dir /home/firex --upload_pip_if_tag --upload_codecov --skip_htmlcov']
+  args: ['sh', '-c', 'sudo pip3 install firexbuilder && firex-build all --sudo --output_dir /home/firex --upload_pip_if_tag --upload_codecov --skip_htmlcov && cp -r /tmp/* test_logs']
   dir: '$BUILD_ID/firex-flame'
   secretEnv: ['TWINE_PASSWORD']
 
 artifacts:
   objects:
     location: 'gs://firex_flame_build_logs'
-    paths: ['/tmp/*']
+    paths: [$BUILD_ID/firex-flame/test_logs/*']
     
 secrets:
 - kmsKeyName: projects/firex-kit-documentation/locations/global/keyRings/secrets/cryptoKeys/TWINE_PASSWORD
