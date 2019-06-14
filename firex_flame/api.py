@@ -16,7 +16,7 @@ def create_socketio_task_api(sio_server, event_aggregator, run_metadata):
 
     @sio_server.on('send-graph-state')
     def emit_frontend_tasks_by_uuid(sid):
-        """ Send the full state."""
+        """ Send 'slim' fields for all tasks. This allows visualization of the graph."""
         sio_server.emit('graph-state', slim_tasks_by_uuid(event_aggregator.tasks_by_uuid), room=sid)
 
     @sio_server.on('send-graph-fields')
@@ -35,17 +35,17 @@ def create_socketio_task_api(sio_server, event_aggregator, run_metadata):
             'root_uuid': event_aggregator.root_uuid,
             'chain': run_metadata['chain'],
             'centralServer': run_metadata['central_server'],
+            'centralServerUiPath': None,  # TODO: propagate this.
             'central_documentation_url': run_metadata['central_documentation_url'],
         }
         sio_server.emit('run-metadata', response, room=sid)
 
     @sio_server.on('send-task-details')
     def emit_detailed_tasks(sid, uuids):
-        """Get the desired task structure
-
+        """ Get all fields for requested task UUIDs.
         Arguments:
-            sid: The session ID to use.
-            uuid(str): The uuid of the desired task to get details for.
+            sid: The session ID to emit to.
+            uuids (str or list of str): The uuid of the desired task to get details for.
         """
         if isinstance(uuids, str):
             uuid = uuids
