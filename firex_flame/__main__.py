@@ -8,7 +8,7 @@ import sys
 from threading import Timer
 
 from firex_flame.main_app import run_flame
-from firex_flame.flame_helper import get_flame_debug_dir, get_flame_pid_file_path
+from firex_flame.flame_helper import get_flame_debug_dir, get_flame_pid_file_path, DEFAULT_FLAME_TIMEOUT
 
 logger = logging.getLogger(__name__)
 eventlet.monkey_patch()
@@ -25,18 +25,27 @@ def _parse_args():
                         default=None)
     # TODO: could validate either rec file exists or broker is supplied.
     parser.add_argument('--broker', help='Celery broker.', default=None)
-    parser.add_argument('--timeout', help='Maximum lifetime of this service, in seconds', type=int,
-                        default=60 * 60 * 24 * 2)
+    parser.add_argument('--flame_timeout', help='Maximum lifetime of this service, in seconds', type=int,
+                        default=DEFAULT_FLAME_TIMEOUT)
     return parser.parse_args()
 
 
 def _sigterm_handler(_, __):
     logger.info('SIGTERM detected, shutting down')
-    sys.exit(0)
+    stop_main_thread()
+
+
+def _sigint_handler(_, __):
+    logger.info('SIGINT detected, shutting down')
+    stop_main_thread()
 
 
 def _exit_on_timeout():
     logger.info("Exiting on timeout")
+    stop_main_thread()
+
+
+def stop_main_thread():
     sys.exit(0)
 
 
@@ -70,7 +79,8 @@ def main():
     _config_logging(args.logs_dir)
 
     signal.signal(signal.SIGTERM, _sigterm_handler)
-    t = Timer(args.timeout, _exit_on_timeout)
+    signal.signal(signal.SIGINT, _sigint_handler)
+    t = Timer(args.flame_timeout, _exit_on_timeout)
     try:
         t.start()
         logger.info('Starting Flame Server with args: %s' % args)

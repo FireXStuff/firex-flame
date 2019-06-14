@@ -9,6 +9,8 @@ from firexapp.submit.tracking_service import TrackingService
 from firexapp.submit.console import setup_console_logging
 from firexapp.submit.uid import Uid
 
+from firex_flame.flame_helper import DEFAULT_FLAME_TIMEOUT
+
 FLAME_LOG_REGISTRY_KEY = 'FLAME_OUTPUT_LOG_REGISTRY_KEY2'
 FileRegistry().register_file(FLAME_LOG_REGISTRY_KEY, os.path.join(Uid.debug_dirname, 'flame2.stdout'))
 
@@ -25,8 +27,8 @@ class FlameLauncher(TrackingService):
         self.port = -1
 
     def extra_cli_arguments(self, arg_parser):
-        # todo: add the ArgParse arguments
-        pass
+        arg_parser.add_argument('--flame_timeout', help='How long the webserver should run for, in seconds.',
+                                default=DEFAULT_FLAME_TIMEOUT)
 
     def start(self, args, port=None, uid=None, **kwargs)->{}:
         # store sync & port state for later
@@ -43,6 +45,7 @@ class FlameLauncher(TrackingService):
             'chain': args.chain,
             'recording': rec_file,
             'central_server': kwargs.get('central_firex_server', None),
+            'flame_timeout': args.flame_timeout
         }
 
         non_empty_args_strs = ['--%s %s' % (k, v) for k, v in cmd_args.items() if v]

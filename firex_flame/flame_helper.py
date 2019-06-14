@@ -1,6 +1,9 @@
 import os
 from pathlib import Path
 
+DEFAULT_FLAME_TIMEOUT = 60 * 60 * 24 * 2
+
+
 def get_flame_debug_dir(root_logs_dir):
     return os.path.join(root_logs_dir, 'debug', 'flame_server')
 

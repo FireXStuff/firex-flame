@@ -1,7 +1,9 @@
 import abc
 import re
 import os
+import psutil
 import signal
+import time
 import requests
 
 from firexapp.testing.config_base import FlowTestConfiguration, assert_is_good_run
@@ -17,20 +19,24 @@ def flame_url_from_output(cmd_output):
     return None
 
 
+def kill_flame(log_dir, sig=signal.SIGKILL):
+    flame_pid = get_flame_pid(log_dir)
+    if psutil.pid_exists(flame_pid):
+        os.kill(flame_pid, sig)
+    return flame_pid
+
+
 class FlameFlowTestConfiguration(FlowTestConfiguration):
     __metaclass__ = abc.ABCMeta
 
     def assert_expected_firex_output(self, cmd_output, cmd_err):
         log_dir = get_log_dir_from_output(cmd_output)
         flame_url = flame_url_from_output(cmd_output)
-        self.assert_on_flame_url(log_dir, flame_url)
-        # do teardown here until there is a real teardown method.
         try:
-            os.kill(get_flame_pid(log_dir), signal.SIGKILL)
-            print('killed flame pid.')
-        except OSError:
-            # Tests might have already killed the run, so an exception b/c it doesn't exist is OK.
-            pass
+            self.assert_on_flame_url(log_dir, flame_url)
+        finally:
+            # do teardown here until there is a real teardown method.
+            kill_flame(log_dir)
 
     @abc.abstractmethod
     def assert_on_flame_url(self, log_dir, flame_url):
@@ -48,7 +54,7 @@ class FlameLaunchesTest(FlameFlowTestConfiguration):
         super().__init__()
 
     def initial_firex_options(self) -> list:
-        return ["submit", "--chain", self.chain]  # "--flame_timeout", "120"
+        return ["submit", "--chain", self.chain, '--sync']
 
     def assert_on_flame_url(self, log_dir, flame_url):
         assert get_flame_pid(log_dir) > 0, "Found no pid: %s" % get_flame_pid(log_dir)
@@ -66,5 +72,44 @@ class FlameLaunchesTest(FlameFlowTestConfiguration):
 
 
 class FlameTimeoutShutdownTest(FlameFlowTestConfiguration):
-    """ TODO: Flame shuts itself down when a given timeout is exceeded."""
-    pass
+    """ Flame shuts itself down when a given timeout is exceeded."""
+
+    def __init__(self):
+        self.flame_timeout = 2
+        super().__init__()
+
+    def initial_firex_options(self) -> list:
+        return ["submit", "--chain", 'nop', '--sync', '--flame_timeout', str(self.flame_timeout)]
+
+    def assert_on_flame_url(self, log_dir, flame_url):
+        time.sleep(self.flame_timeout + 1)
+        flame_pid = get_flame_pid(log_dir)
+        assert not psutil.pid_exists(flame_pid), "Timeout should have killed flame pid, but it still exists."
+
+
+class FlameSigtermShutdownTest(FlameFlowTestConfiguration):
+    """ Flame shutsdown cleanly when getting a sigterm."""
+
+    def initial_firex_options(self) -> list:
+        return ["submit", "--chain", 'nop', '--sync']
+
+    def assert_on_flame_url(self, log_dir, flame_url):
+        flame_pid = get_flame_pid(log_dir)
+        assert psutil.pid_exists(flame_pid), "Flame pid should exist before being killed by SIGTERM."
+        kill_flame(log_dir, sig=signal.SIGTERM)
+        time.sleep(2)
+        assert not psutil.pid_exists(flame_pid), "SIGTERM should have caused flame to terminate, but pid still exists."
+
+
+class FlameSigintShutdownTest(FlameFlowTestConfiguration):
+    """ Flame shutsdown cleanly when getting a sigint."""
+
+    def initial_firex_options(self) -> list:
+        return ["submit", "--chain", 'nop', '--sync']
+
+    def assert_on_flame_url(self, log_dir, flame_url):
+        flame_pid = get_flame_pid(log_dir)
+        assert psutil.pid_exists(flame_pid), "Flame pid should exist before being killed by SIGINT."
+        kill_flame(log_dir, sig=signal.SIGINT)
+        time.sleep(2)
+        assert not psutil.pid_exists(flame_pid), "SIGINT should have caused flame to terminate, but pid still exists."
