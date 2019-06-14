@@ -7,10 +7,13 @@ steps:
   dir: '$BUILD_ID/firex-flame'
   secretEnv: ['TWINE_PASSWORD']
 
-artifacts:
-  objects:
-    location: 'gs://firex_flame_build_logs'
-    paths: ['$BUILD_ID/firex-flame/test_logs/*']
+- name: 'gcr.io/cloud-builders/gsutil'
+  args: ['-m', 'cp', '-r', '$BUILD_ID/firex-flame/test_logs/*', 'gs://firex_flame_build_logs']
+
+#artifacts:
+#  objects:
+#    location: 'gs://firex_flame_build_logs'
+#    paths: ['$BUILD_ID/firex-flame/test_logs/*']
     
 secrets:
 - kmsKeyName: projects/firex-kit-documentation/locations/global/keyRings/secrets/cryptoKeys/TWINE_PASSWORD
