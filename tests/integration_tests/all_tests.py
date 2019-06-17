@@ -148,20 +148,23 @@ class FlameRevokeTest(FlameFlowTestConfiguration):
         sio_client = socketio.Client()
         resp = {'success': None}
 
-        @sio_client.on('revoke-success')
+        SUCCESS_EVENT = 'revoke-success'
+        
+        @sio_client.on(SUCCESS_EVENT)
         def revoke_success(_):
-            resp['success'] = True
+            resp['success'] = SUCCESS_EVENT
 
         @sio_client.on('revoke-failed')
         def revoke_failed(_):
-            resp['success'] = False
+            resp['success'] = 'revoke-failed'
 
         sio_client.connect(flame_url)
         sio_client.emit('revoke-task', data=root_uuid)
         wait_until(lambda: resp['success'] is not None, timeout=10, sleep_for=1)
         sio_client.disconnect()
 
-        assert resp['success'], "Failed to receive acknowledgement of successful root task revoke."
+        assert resp['success'] == SUCCESS_EVENT, "Expected response %s but received %s" \
+                                                 % (SUCCESS_EVENT, resp['success'])
 
         # Need to re-parse task data, since now it should be revoked
         tasks_by_uuid, root_uuid = get_tasks_from_log_dir(log_dir)
