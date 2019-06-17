@@ -4,6 +4,7 @@ import json
 
 from firex_flame.controller import dump_data_model
 from firex_flame.event_aggregator import FlameEventAggregator
+from firex_flame.flame_helper import get_rec_file
 
 
 def process_recording_file(event_aggregator, recording_file):
@@ -30,3 +31,12 @@ def dumper_main():
     aggregator = FlameEventAggregator()
     process_recording_file(aggregator, args.rec)
     dump_data_model(args.dest_dir, aggregator.tasks_by_uuid)
+
+
+def get_tasks_from_log_dir(log_dir):
+    rec_file = get_rec_file(log_dir)
+    assert os.path.exists(rec_file), "Recording file not found: %s" % rec_file
+    aggregator = FlameEventAggregator()
+    process_recording_file(aggregator, rec_file)
+
+    return aggregator.tasks_by_uuid, aggregator.root_uuid

@@ -12,7 +12,7 @@ from firexapp.submit.console import setup_console_logging
 from firexapp.submit.uid import Uid
 
 from firex_flame.flame_helper import DEFAULT_FLAME_TIMEOUT, wait_until_web_request_ok, get_flame_debug_dir, \
-    wait_until_path_exist
+    wait_until_path_exist, get_rec_file
 
 FLAME_LOG_REGISTRY_KEY = 'FLAME_OUTPUT_LOG_REGISTRY_KEY2'
 FileRegistry().register_file(FLAME_LOG_REGISTRY_KEY, os.path.join(Uid.debug_dirname, 'flame2.stdout'))
@@ -57,7 +57,7 @@ class FlameLauncher(TrackingService):
         # store sync & port state for later
         self.sync = args.sync
         self.port = int(port) if port else get_available_port()
-        rec_file = os.path.join(uid.logs_dir, 'flame2.rec')
+        rec_file = get_rec_file(uid.logs_dir)
         broker_recv_ready_file = os.path.join(get_flame_debug_dir(uid.logs_dir), 'celery_receiver_ready')
 
         # assemble startup cmd

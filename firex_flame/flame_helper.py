@@ -69,3 +69,7 @@ def stop_main_thread(reason):
         sys.exit(0)
     else:
         _interrupt_main_thread()
+
+
+def get_rec_file(log_dir):
+    return os.path.join(log_dir, 'flame2.rec')
