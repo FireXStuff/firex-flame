@@ -62,7 +62,8 @@ def _interrupt_main_thread():
     thread.interrupt_main()
 
 
-def stop_main_thread():
+def stop_main_thread(reason):
+    logging.info("Stopping for reason: %s" % reason)
     if threading.current_thread() is threading.main_thread():
         logger.info('sysexit from main thread')
         sys.exit(0)

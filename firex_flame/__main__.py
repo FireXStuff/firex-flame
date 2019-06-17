@@ -33,18 +33,15 @@ def _parse_args():
 
 
 def _sigterm_handler(_, __):
-    logger.info('SIGTERM detected, shutting down')
-    stop_main_thread()
+    stop_main_thread('SIGTERM detected, shutting down')
 
 
 def _sigint_handler(_, __):
-    logger.info('SIGINT detected, shutting down')
-    stop_main_thread()
+    stop_main_thread('SIGINT detected, shutting down')
 
 
 def _exit_on_timeout():
-    logger.info("Exiting on timeout")
-    stop_main_thread()
+    stop_main_thread('timeout exceeded')
 
 
 def _config_logging(root_logs_dir):
@@ -73,11 +70,11 @@ def _create_run_metadata(cli_args):
 
 
 def main():
-    args = _parse_args()
-    _config_logging(args.logs_dir)
-
     signal.signal(signal.SIGTERM, _sigterm_handler)
     signal.signal(signal.SIGINT, _sigint_handler)
+
+    args = _parse_args()
+    _config_logging(args.logs_dir)
     t = threading.Timer(args.flame_timeout, _exit_on_timeout)
     try:
         t.start()

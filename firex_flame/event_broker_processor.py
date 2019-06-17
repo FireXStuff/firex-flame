@@ -58,8 +58,8 @@ class BrokerEventConsumerThread(threading.Thread):
                     try_interval = 1
                     self._create_receiver_ready_file()
                     recv.capture(limit=None, timeout=None, wakeup=True)
-            except (KeyboardInterrupt, SystemExit):
-                stop_main_thread()
+            except (KeyboardInterrupt, SystemExit) as e:
+                stop_main_thread(str(e))
             # pylint: disable=C0321
             except Exception:
                 if self.event_aggregator.is_root_complete():
