@@ -7,11 +7,12 @@ import time
 import requests
 import urllib.parse
 
+import socketio
 from firexapp.testing.config_base import FlowTestConfiguration, assert_is_good_run
 from firexapp.submit.submit import get_log_dir_from_output
 
-from firex_flame.flame_helper import get_flame_pid, wait_until_pid_not_exist
-
+from firex_flame.event_file_processor import get_tasks_from_log_dir
+from firex_flame.flame_helper import get_flame_pid, wait_until_pid_not_exist, wait_until, get_rec_file
 
 def flame_url_from_output(cmd_output):
     m = re.search(r'Flame: (http://.*)\n', cmd_output)
@@ -24,7 +25,7 @@ def kill_flame(log_dir, sig=signal.SIGKILL):
     flame_pid = get_flame_pid(log_dir)
     if psutil.pid_exists(flame_pid):
         os.kill(flame_pid, sig)
-        wait_until_pid_not_exist(flame_pid, timeout=30)
+        wait_until_pid_not_exist(flame_pid, timeout=10)
     return flame_pid
 
 
@@ -116,3 +117,53 @@ class FlameSigintShutdownTest(FlameFlowTestConfiguration):
         assert psutil.pid_exists(flame_pid), "Flame pid should exist before being killed by SIGINT."
         kill_flame(log_dir, sig=signal.SIGINT)
         assert not psutil.pid_exists(flame_pid), "SIGINT should have caused flame to terminate, but pid still exists."
+
+
+def wait_until_root_exists(log_dir, timeout=20, sleep_for=1):
+    def does_root_exist(log_dir):
+        if not os.path.isfile(get_rec_file(log_dir)):
+            return False
+        _, root_uuid = get_tasks_from_log_dir(log_dir)
+        return root_uuid is not None
+
+    return wait_until(does_root_exist, timeout, sleep_for, log_dir)
+
+
+class FlameRevokeTest(FlameFlowTestConfiguration):
+    """ Uses Flame SocketIO API to revoke a run. """
+
+    # Don't run with --sync, since this test will revoke the incomplete root task.
+    sync = False
+
+    def initial_firex_options(self) -> list:
+        return ["submit", "--chain", 'sleep', '--sleep', '60']
+
+    def assert_on_flame_url(self, log_dir, flame_url):
+        root_exists = wait_until_root_exists(log_dir)
+        assert root_exists, "Root task doesn't exist in the flame rec file, something is wrong with run."
+        tasks, root_uuid = get_tasks_from_log_dir(log_dir)
+        root_task_runstate = tasks[root_uuid]['state']
+        assert root_task_runstate == 'task-incomplete', "Expected incomplete root, but found %s" % root_task_runstate
+
+        sio_client = socketio.Client()
+        resp = {'success': None}
+
+        @sio_client.on('revoke-success')
+        def revoke_success(_):
+            resp['success'] = True
+
+        @sio_client.on('revoke-failed')
+        def revoke_failed(_):
+            resp['success'] = False
+
+        sio_client.connect(flame_url)
+        sio_client.emit('revoke-task', data=root_uuid)
+        wait_until(lambda: resp['success'] is not None, timeout=10, sleep_for=1)
+        sio_client.disconnect()
+
+        assert resp['success'], "Failed to receive acknowledgement of successful root task revoke."
+
+        # Need to re-parse task data, since now it should be revoked
+        tasks_by_uuid, root_uuid = get_tasks_from_log_dir(log_dir)
+        root_runstate = tasks_by_uuid[root_uuid]['state']
+        assert root_runstate == 'task-revoked', "Expected root runstate to be revoked, was %s" % root_runstate
