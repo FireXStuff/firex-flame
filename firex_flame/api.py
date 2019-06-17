@@ -2,10 +2,11 @@
 Flask API module for interacting with celery tasks.
 """
 
-import time
 import logging
 
 from flask import jsonify
+
+from firex_flame.flame_helper import wait_until
 
 from firex_flame.event_aggregator import slim_tasks_by_uuid, INCOMPLETE_STATES
 
@@ -70,19 +71,13 @@ def create_revoke_api(sio_server, celery_app, tasks):
 
     @sio_server.on('revoke-task')
     def socket_revoke_task(sid, uuid):
-        response = _revoke_task(uuid)
-        socket_event = 'revoke-success' if response else 'revoke-failed'
-        sio_server.emit(socket_event, room=sid)
+        logger.info("Received request to revoke %s" % uuid)
+        revoked = _revoke_task(uuid)
+        response_event = 'revoke-success' if revoked else 'revoke-failed'
+        sio_server.emit(response_event, room=sid)
 
-    def _wait_task_complete(task):
-        check_timeout = 5
-        check = 1
-        while task['state'] in INCOMPLETE_STATES:
-            time.sleep(1)
-            if check > check_timeout:
-                break
-            else:
-                check += 1
+    def _wait_until_task_complete(task, timeout, sleep_for=1):
+        wait_until(lambda t: t['state'] not in INCOMPLETE_STATES, timeout, sleep_for, task)
 
     def _revoke_task(uuid):
         if uuid not in tasks:
@@ -94,9 +89,17 @@ def create_revoke_api(sio_server, celery_app, tasks):
         # Try to revoke the task
         if task['state'] in INCOMPLETE_STATES:
             celery_app.control.revoke(uuid, terminate=True)
+        else:
+            logger.info("Task %s already in terminal state %s" % (uuid, task['state']))
 
         # Wait for the task to become revoked
-        _wait_task_complete(task)
+        revoke_timeout = 10
+        _wait_until_task_complete(task, timeout=revoke_timeout)
 
-        # If the task was successfully revoked, return true
-        return task['state'] == 'task-revoked'
+        task_runstate = task['state']
+        revoked = task_runstate == 'task-revoked'
+        if not revoked:
+            logger.warning("Failed to revoke task: waited %s sec and runstate is currently %s"
+                           % (revoke_timeout, task_runstate))
+
+        return revoked  # If the task was successfully revoked, return true
