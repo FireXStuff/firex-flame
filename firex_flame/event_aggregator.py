@@ -1,12 +1,34 @@
 """
 Aggregates events in to the task data model.
 """
-
+from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
 
-
+#
+# config field options:
+#   copy_celery - True if this field should be copied from the celery event to the task data model. If the field already
+#                   has a value on the data model, more recent celery field values will overwrite existing values by
+#                   default. If overwriting should be avoided, see 'aggregate_merge' and 'aggregate_keep_initial'
+#                   options described below.
+#
+#   slim_field - True if this field should be included in the 'slim' (minimal) data model representation sent to the UI.
+#                   Be very careful adding fields, since this field will be sent for each node and can therefore greatly
+#                   increase the amount of data sent to the UI on main graph load.
+#
+#   transform_celery - A function to be executed on the entire event when the corresponding key is present in a celery
+#                       event. The function returns a dict that dict.update the existing data from the event, possibly
+#                       overwriting data copied from the celery event by copy_celery=True. Can be used to change
+#                       the field name on the data model from the field name from celery.
+#
+#   aggregate_merge - True if model updates should deep merge collection data types (lists, dicts, sets) instead of
+#                       overwriting.
+#
+#   aggregate_keep_initial - True if data model field updates should be ignored after an initial value has been set.
+#                               This is one way of preventing overwriting, see also 'aggregate_merge'.
+#
+#
 FIELD_CONFIG = {
     'uuid': {'copy_celery': True, 'slim_field': True},
     'hostname': {'copy_celery': True, 'slim_field': True},
@@ -79,11 +101,11 @@ STATE_TYPES = {
     'task-received': {'terminal': False},
     'task-blocked': {'terminal': False},
     'task-started': {'terminal': False},
+    'task-unblocked': {'terminal': False},
     'task-succeeded': {'terminal': True},
     'task-failed': {'terminal': True},
     'task-revoked': {'terminal': True},
     'task-incomplete': {'terminal': True},  # server-side kludge state to fix tasks that will never complete.
-    'task-unblocked': {'terminal': False},
 }
 COMPLETE_STATES = [s for s, v in STATE_TYPES.items() if v['terminal']]
 INCOMPLETE_STATES = [s for s, v in STATE_TYPES.items() if not v['terminal']]
@@ -115,7 +137,7 @@ def _deep_merge(dict1, dict2):
                 # already the same value in both dicts, take from either.
                 result[d2_key] = v1
             else:
-                # Both d1 and d2 have entries for d2_key, both entries are not dicts or lists,
+                # Both d1 and d2 have entries for d2_key, both entries are not dicts or lists or sets,
                 # and the values are not the same. This is a conflict.
                 # Overwrite d1's value to simulate dict.update() behaviour.
                 result[d2_key] = v2
@@ -150,7 +172,7 @@ def find_data_changes(task, new_task_data):
         if new_data_key not in task or task[new_data_key] != new_data_val:
             changed_data[new_data_key] = new_data_val
 
-    # Some fields are dropped if there is already a value (no_overwrite).
+    # Some field updates are dropped if there is already a value for that field name (keep initial).
     for no_overwrite_key in AGGREGATE_KEEP_INITIAL_FIELDS:
         if no_overwrite_key in new_task_data and no_overwrite_key not in task:
             changed_data[no_overwrite_key] = new_task_data[no_overwrite_key]
@@ -171,6 +193,7 @@ def slim_tasks_by_uuid(tasks_by_uuid):
 
 
 class FlameEventAggregator:
+    """ Aggregates many events in to the task data model. """
 
     def __init__(self):
         self.tasks_by_uuid = {}
@@ -194,12 +217,15 @@ class FlameEventAggregator:
         that is generated here so that the UI can show a non-incomplete runstate.
         :return:
         """
-        return [{'uuid': t['uuid'], 'type': 'task-incomplete'}
+        return [{'uuid': t['uuid'], 'type': 'task-incomplete', 'timestamp': datetime.now().timestamp()}
                 for t in self.tasks_by_uuid.values()
                 if t['type'] in INCOMPLETE_STATES]
 
     def is_root_complete(self):
-        return self.tasks_by_uuid.get(self.root_uuid, {'state': None})['state'] in COMPLETE_STATES
+        if not self.root_uuid or self.root_uuid not in self.tasks_by_uuid:
+            return False  # Might not have root event yet.
+        root_runstate = self.tasks_by_uuid[self.root_uuid].get('state', None)
+        return root_runstate in COMPLETE_STATES
 
     def _get_or_create_task(self, task_uuid):
         if task_uuid not in self.tasks_by_uuid:
@@ -217,7 +243,10 @@ class FlameEventAggregator:
 
     def _aggregate_event(self, event):
         if ('uuid' not in event
-                # revoked events can be sent before any other, and we'll never get any data (name, etc) for that task.
+                # The uuid can be null, it's unclear what this means but it can't be associated with a task.
+                or not event['uuid']
+                # Revoked events can be sent before any other, and we'll never get any data (name, etc) for that task.
+                # Therefore ignore events that are for a new UUID that have revoked type.
                 or (event['uuid'] not in self.tasks_by_uuid and event.get('type', '') == 'task-revoked')):
             return {}
 
