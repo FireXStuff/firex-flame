@@ -149,7 +149,7 @@ class FlameRevokeTest(FlameFlowTestConfiguration):
         resp = {'success': None}
 
         SUCCESS_EVENT = 'revoke-success'
-        
+
         @sio_client.on(SUCCESS_EVENT)
         def revoke_success(_):
             resp['success'] = SUCCESS_EVENT
@@ -160,7 +160,7 @@ class FlameRevokeTest(FlameFlowTestConfiguration):
 
         sio_client.connect(flame_url)
         sio_client.emit('revoke-task', data=root_uuid)
-        wait_until(lambda: resp['success'] is not None, timeout=10, sleep_for=1)
+        wait_until(lambda: resp['success'] is not None, timeout=60, sleep_for=1)
         sio_client.disconnect()
 
         assert resp['success'] == SUCCESS_EVENT, "Expected response %s but received %s" \
