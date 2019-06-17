@@ -30,18 +30,18 @@ def wait_webserver_and_celery_recv_ready(flame_url, broker_recv_ready_file):
     # Wait for web server via HTTP GET.
     webserver_wait_timeout = 10
     webserver_alive = wait_until_web_request_ok(urllib.parse.urljoin(flame_url, '/alive'),
-                                                timeout=webserver_wait_timeout)
+                                                timeout=webserver_wait_timeout, sleep_for=0.5)
     if not webserver_alive:
         raise Exception("Flame web server at %s not up after %s seconds." % (flame_url, webserver_wait_timeout))
 
     # Wait for broker ready file to be created by flame.
-    celery_recvr_timeout = 10
-    broker_recv_ready = wait_until_path_exist(broker_recv_ready_file, timeout=celery_recvr_timeout)
+    celery_recvr_timeout = 5
+    broker_recv_ready = wait_until_path_exist(broker_recv_ready_file, timeout=celery_recvr_timeout, sleep_for=0.5)
     if not broker_recv_ready:
         raise Exception("Flame celery receiver not ready after %s seconds." % celery_recvr_timeout)
 
     end_wait = time.perf_counter()
-    logger.info("Waited %.1f seconds for web server & celery receiver to become ready." % (end_wait - start_wait))
+    logger.debug("Waited %.1f seconds for web server & celery receiver to become ready." % (end_wait - start_wait))
 
 
 class FlameLauncher(TrackingService):
