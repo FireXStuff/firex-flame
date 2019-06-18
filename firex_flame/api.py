@@ -61,7 +61,6 @@ def create_socketio_task_api(sio_server, event_aggregator, run_metadata):
 
 
 def create_rest_task_api(web_app, tasks):
-    web_app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
 
     @web_app.route('/api/tasks')
     def all_tasks_by_uuid():

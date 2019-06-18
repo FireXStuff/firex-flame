@@ -1,0 +1,61 @@
+{% macro header_links(links) -%}
+    {% for link in links %}
+        <link href={{link.href}} rel={{link.rel}}
+          {% if link.as %} as={{link.as}} {% endif %}>
+    {% endfor %}
+{%- endmacro %}
+
+{% macro scripts(input_scripts) -%}
+    {% for script in input_scripts %}
+        <script src={{script.src}}></script>
+    {% endfor %}
+{%- endmacro %}
+
+{% macro complete_index_page(relative_head_links, relative_body_scripts,
+    central_head_links=None, central_body_scripts=None) -%}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset=utf-8>
+    <meta name=viewport content="width=device-width,initial-scale=1">
+    <link href="https://fonts.googleapis.com/css?family=Source+Code+Pro|Source+Code+Pro:700|Source+Sans+Pro|Source+Sans+Pro:700"
+          rel=stylesheet>
+    <title>Flame2</title>
+
+    {% if central_head_links %}
+        {# If there is a central sever, try to load resources from there to leverage browser caching #}
+        {{ header_links(central_head_links) }}
+
+        {# If the main app couldn't be loaded from the central server, load the relative files.
+            This involves recursively re-creating this entire index page with only the relative links/scripts #}
+        <script>
+            window.onload = function() {
+                if (!window.flameUiLoadStarted) {
+                    console.log("UI load not started within onload. Attempting to load relative resources.");
+                    document.write(
+                        '{{complete_index_page(relative_head_links, relative_body_scripts).unescape()
+                            | replace("</","<\/") |  replace("\n", "") | safe }}');
+                }
+            };
+        </script>
+    {% else %}
+        {# If no central server, exclusively serve the relative files (no fallback) #}
+        {# This can mean either the entire flame server has no central server from which to fetch the UI,
+             or it's the fallback page that is used when a browser fails to load resources from the central server. #}
+        {{ header_links(relative_head_links) }}
+    {% endif %}
+</head>
+<body>
+<div id=app></div>
+    {% if central_body_scripts %}
+        {{ scripts(central_body_scripts) }}
+    {% else %}
+        {{ scripts(relative_body_scripts) }}
+    {% endif %}
+</body>
+</html>
+{%- endmacro %}
+
+{# The top-level page can be either relative URLs only, or both relative & central
+    (i.e. central with fallback to relative) #}
+{{ complete_index_page(relative_head_links, relative_body_scripts, central_head_links, central_body_scripts) }}
