@@ -6,8 +6,8 @@ steps:
   args: ['sh', '-c', 'sudo pip3 install firexbuilder && firex-build all --sudo --output_dir /home/firex --upload_pip_if_tag --upload_codecov --skip_htmlcov || sudo cp -r /tmp test_logs']
   dir: '$BUILD_ID/firex-flame'
   secretEnv: ['TWINE_PASSWORD']
-- name: gcr.io/$PROJECT_ID/firex-alpine-build
-  args: ['sh', '-c', '/google/google-cloud-sdk/bin/gsutil -m cp -r $BUILD_ID/firex-flame/test_logs/* gs://firex_flame_build_logs']
+- name: google/cloud-sdk
+  args: ['sh', '-c', 'gsutil -m cp -r $BUILD_ID/firex-flame/test_logs/* gs://firex_flame_build_logs']
 #- name: gcr.io/cloud-builders/gsutil
 #  args: ['-m', 'cp', '-r', '$BUILD_ID/firex-flame/test_logs/*', 'gs://firex_flame_build_logs']
     
