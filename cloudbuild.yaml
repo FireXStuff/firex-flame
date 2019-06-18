@@ -7,10 +7,11 @@ steps:
   dir: '$BUILD_ID/firex-flame'
   secretEnv: ['TWINE_PASSWORD']
 - name: google/cloud-sdk
-  args: ['sh', '-c', 'gsutil -m cp -r $BUILD_ID/firex-flame/test_logs/* gs://firex_flame_build_logs']
-#- name: gcr.io/cloud-builders/gsutil
-#  args: ['-m', 'cp', '-r', '$BUILD_ID/firex-flame/test_logs/*', 'gs://firex_flame_build_logs']
-    
+  # Only copy if test_logs exists since that indicates test failure.
+  # Always return non-zero after copy so that overall build status reflects test failure.
+  args: ['sh', '-c', '[ ! -d test_logs ] || gsutil -m cp -r $BUILD_ID/firex-flame/test_logs/* gs://firex_flame_build_logs && false']
+  dir: '$BUILD_ID/firex-flame'
+
 secrets:
 - kmsKeyName: projects/firex-kit-documentation/locations/global/keyRings/secrets/cryptoKeys/TWINE_PASSWORD
   secretEnv:
