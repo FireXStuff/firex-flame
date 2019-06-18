@@ -8,7 +8,7 @@ import requests
 import urllib.parse
 
 import socketio
-from firexapp.testing.config_base import FlowTestConfiguration, assert_is_good_run
+from firexapp.testing.config_base import FlowTestConfiguration, assert_is_good_run, skip_test
 from firexapp.submit.submit import get_log_dir_from_output
 
 from firex_flame.event_file_processor import get_tasks_from_log_dir
@@ -179,44 +179,45 @@ class FlameRevokeNonExistantUuidTest(FlameFlowTestConfiguration):
 #   Underlying revoke call (celery_app.control.revoke(uuid, terminate=True) doesn't work in GCP for some reason,
 #   So this test can't be executed there.
 #
-# class FlameRevokeSuccessTest(FlameFlowTestConfiguration):
-#     """ Uses Flame's SocketIO API to revoke a run. """
-#
-#     # Don't run with --sync, since this test will revoke the incomplete root task.
-#     sync = False
-#
-#     def initial_firex_options(self) -> list:
-#         # Sleep so that assert_on_flame_url can call revoke while the run is incomplete.
-#         return ["submit", "--chain", 'sleep', '--sleep', '30']
-#
-#     def assert_on_flame_url(self, log_dir, flame_url):
-#         sleep_exists = wait_until_task_name_exists(log_dir, 'sleep')
-#         assert sleep_exists, "Sleep task doesn't exist in the flame rec file, something is wrong with run."
-#         sleep_task = get_tasks_by_name(log_dir, 'sleep', expect_single=True)
-#         assert sleep_task['state'] == 'task-incomplete', \
-#           "Expected incomplete sleep, but found %s" % sleep_task['state']
-#
-#         sio_client = socketio.Client()
-#         resp = {'response': None}
-#         SUCCESS_EVENT = 'revoke-success'
-#
-#         @sio_client.on(SUCCESS_EVENT)
-#         def revoke_success(_):
-#             resp['response'] = SUCCESS_EVENT
-#
-#         @sio_client.on('revoke-failed')
-#         def revoke_failed(_):
-#             resp['response'] = 'revoke-failed'
-#
-#         sio_client.connect(flame_url)
-#         sio_client.emit('revoke-task', data='This is not a UUID.')
-#         wait_until(lambda: resp['response'] is not None, timeout=60, sleep_for=1)
-#         sio_client.disconnect()
-#
-#         assert resp['response'] == SUCCESS_EVENT, "Expected response %s but received %s" \
-#                                                   % (SUCCESS_EVENT, resp['response'])
-#
-#         # Need to re-parse task data, since now it should be revoked.
-#         sleep_task_after_revoke = get_tasks_by_name(log_dir, 'sleep', expect_single=True)
-#         sleep_runstate = sleep_task_after_revoke['state']
-#         assert sleep_runstate == 'task-revoked', "Expected sleep runstate to be revoked, was %s" % sleep_runstate
+@skip_test
+class FlameRevokeSuccessTest(FlameFlowTestConfiguration):
+    """ Uses Flame's SocketIO API to revoke a run. """
+
+    # Don't run with --sync, since this test will revoke the incomplete root task.
+    sync = False
+
+    def initial_firex_options(self) -> list:
+        # Sleep so that assert_on_flame_url can call revoke while the run is incomplete.
+        return ["submit", "--chain", 'sleep', '--sleep', '30']
+
+    def assert_on_flame_url(self, log_dir, flame_url):
+        sleep_exists = wait_until_task_name_exists(log_dir, 'sleep')
+        assert sleep_exists, "Sleep task doesn't exist in the flame rec file, something is wrong with run."
+        sleep_task = get_tasks_by_name(log_dir, 'sleep', expect_single=True)
+        assert sleep_task['state'] == 'task-incomplete', \
+          "Expected incomplete sleep, but found %s" % sleep_task['state']
+
+        sio_client = socketio.Client()
+        resp = {'response': None}
+        SUCCESS_EVENT = 'revoke-success'
+
+        @sio_client.on(SUCCESS_EVENT)
+        def revoke_success(_):
+            resp['response'] = SUCCESS_EVENT
+
+        @sio_client.on('revoke-failed')
+        def revoke_failed(_):
+            resp['response'] = 'revoke-failed'
+
+        sio_client.connect(flame_url)
+        sio_client.emit('revoke-task', data='This is not a UUID.')
+        wait_until(lambda: resp['response'] is not None, timeout=60, sleep_for=1)
+        sio_client.disconnect()
+
+        assert resp['response'] == SUCCESS_EVENT, "Expected response %s but received %s" \
+                                                  % (SUCCESS_EVENT, resp['response'])
+
+        # Need to re-parse task data, since now it should be revoked.
+        sleep_task_after_revoke = get_tasks_by_name(log_dir, 'sleep', expect_single=True)
+        sleep_runstate = sleep_task_after_revoke['state']
+        assert sleep_runstate == 'task-revoked', "Expected sleep runstate to be revoked, was %s" % sleep_runstate
