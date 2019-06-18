@@ -7,7 +7,7 @@ steps:
   dir: '$BUILD_ID/firex-flame'
   secretEnv: ['TWINE_PASSWORD']
 - name: gcr.io/$PROJECT_ID/firex-alpine-build
-  args: ['sh', '-c', 'gsutil -m cp -r $BUILD_ID/firex-flame/test_logs/* gs://firex_flame_build_logs']
+  args: ['sh', '-c', '/google/google-cloud-sdk/bin/gsutil -m cp -r $BUILD_ID/firex-flame/test_logs/* gs://firex_flame_build_logs']
 #- name: gcr.io/cloud-builders/gsutil
 #  args: ['-m', 'cp', '-r', '$BUILD_ID/firex-flame/test_logs/*', 'gs://firex_flame_build_logs']
     
