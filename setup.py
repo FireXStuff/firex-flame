@@ -23,7 +23,7 @@ setup(name='firex_flame',
             "requests",
       ],
       package_data={
-        'firex_flame': ['ui/*.html', 'ui/js/*.js', 'ui/img/*', 'ui/css/*.css'],
+        'firex_flame': ['templates/*.html'],
       },
       entry_points={
           'console_scripts': ['firex_flame = firex_flame.__main__:main',
