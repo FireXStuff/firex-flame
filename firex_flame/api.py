@@ -90,11 +90,12 @@ def create_revoke_api(sio_server, celery_app, tasks):
         # Try to revoke the task
         if task['state'] in INCOMPLETE_STATES:
             celery_app.control.revoke(uuid, terminate=True)
+            logger.info("Submitted revoke to celery for: %s" % uuid)
         else:
             logger.info("Task %s already in terminal state %s" % (uuid, task['state']))
 
         # Wait for the task to become revoked
-        revoke_timeout = 30
+        revoke_timeout = 10
         _wait_until_task_complete(task, timeout=revoke_timeout)
 
         task_runstate = task['state']
