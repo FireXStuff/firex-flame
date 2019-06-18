@@ -130,12 +130,13 @@ def wait_until_root_exists(log_dir, timeout=20, sleep_for=1):
 
 
 class FlameRevokeTest(FlameFlowTestConfiguration):
-    """ Uses Flame SocketIO API to revoke a run. """
+    """ Uses Flame's SocketIO API to revoke a run. """
 
     # Don't run with --sync, since this test will revoke the incomplete root task.
     sync = False
 
     def initial_firex_options(self) -> list:
+        # Sleep so that assert_on_flame_url can call revoke while the run is incomplete.
         return ["submit", "--chain", 'sleep', '--sleep', '60']
 
     def assert_on_flame_url(self, log_dir, flame_url):
