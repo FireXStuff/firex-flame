@@ -120,13 +120,32 @@ class FlameSigintShutdownTest(FlameFlowTestConfiguration):
 
 
 def wait_until_root_exists(log_dir, timeout=20, sleep_for=1):
-    def does_root_exist(log_dir):
+    return wait_until_tasks_predicate(lambda _, r: r is not None, log_dir, timeout, sleep_for)
+
+
+def wait_until_task_name_exists(log_dir, task_name, timeout=20, sleep_for=1):
+    return wait_until_tasks_predicate(lambda ts, _: any(t['name'] == task_name for t in ts.values()),
+                                      log_dir, timeout, sleep_for)
+
+
+def wait_until_tasks_predicate(tasks_pred, log_dir, timeout=20, sleep_for=1):
+    def until_pred():
         if not os.path.isfile(get_rec_file(log_dir)):
             return False
-        _, root_uuid = get_tasks_from_log_dir(log_dir)
-        return root_uuid is not None
+        tasks, root_uuid = get_tasks_from_log_dir(log_dir)
+        return tasks_pred(tasks, root_uuid)
 
-    return wait_until(does_root_exist, timeout, sleep_for, log_dir)
+    return wait_until(until_pred, timeout, sleep_for)
+
+
+def get_tasks_by_name(log_dir, name, expect_single=False):
+    tasks, _ = get_tasks_from_log_dir(log_dir)
+    tasks_with_name = [t for t in tasks.values() if t['name'] == name]
+    if expect_single and tasks_with_name:
+        nameed_task_count = len(tasks_with_name)
+        assert nameed_task_count == 1, "Expecting single task with name '%s', but found %s" % (name, nameed_task_count)
+        return tasks_with_name[0]
+    return tasks_with_name
 
 
 class FlameRevokeTest(FlameFlowTestConfiguration):
@@ -140,11 +159,10 @@ class FlameRevokeTest(FlameFlowTestConfiguration):
         return ["submit", "--chain", 'sleep', '--sleep', '60']
 
     def assert_on_flame_url(self, log_dir, flame_url):
-        root_exists = wait_until_root_exists(log_dir)
-        assert root_exists, "Root task doesn't exist in the flame rec file, something is wrong with run."
-        tasks, root_uuid = get_tasks_from_log_dir(log_dir)
-        root_task_runstate = tasks[root_uuid]['state']
-        assert root_task_runstate == 'task-incomplete', "Expected incomplete root, but found %s" % root_task_runstate
+        sleep_exists = wait_until_task_name_exists(log_dir, 'sleep')
+        assert sleep_exists, "Sleep task doesn't exist in the flame rec file, something is wrong with run."
+        sleep_task = get_tasks_by_name(log_dir, 'sleep', expect_single=True)
+        assert sleep_task['state'] == 'task-incomplete', "Expected incomplete sleep, but found %s" % sleep_task['state']
 
         sio_client = socketio.Client()
         resp = {'success': None}
@@ -160,7 +178,7 @@ class FlameRevokeTest(FlameFlowTestConfiguration):
             resp['success'] = 'revoke-failed'
 
         sio_client.connect(flame_url)
-        sio_client.emit('revoke-task', data=root_uuid)
+        sio_client.emit('revoke-task', data=sleep_task['uuid'])
         wait_until(lambda: resp['success'] is not None, timeout=60, sleep_for=1)
         sio_client.disconnect()
 
@@ -168,6 +186,6 @@ class FlameRevokeTest(FlameFlowTestConfiguration):
                                                  % (SUCCESS_EVENT, resp['success'])
 
         # Need to re-parse task data, since now it should be revoked
-        tasks_by_uuid, root_uuid = get_tasks_from_log_dir(log_dir)
-        root_runstate = tasks_by_uuid[root_uuid]['state']
-        assert root_runstate == 'task-revoked', "Expected root runstate to be revoked, was %s" % root_runstate
+        sleep_task_after_revoke = get_tasks_by_name(log_dir, 'sleep', expect_single=True)
+        sleep_runstate = sleep_task_after_revoke['state']
+        assert sleep_runstate == 'task-revoked', "Expected sleep runstate to be revoked, was %s" % sleep_runstate
