@@ -7,6 +7,7 @@ import time
 import requests
 import urllib.parse
 
+from bs4 import BeautifulSoup
 import socketio
 from firexapp.testing.config_base import FlowTestConfiguration, assert_is_good_run, skip_test
 from firexapp.submit.submit import get_log_dir_from_output
@@ -50,6 +51,13 @@ class FlameFlowTestConfiguration(FlowTestConfiguration):
         assert_is_good_run(ret_value)
 
 
+def assert_all_match_some_prefix(strs, allowed_prefixes):
+    for string in strs:
+        if not any(string.startswith(ignore) for ignore in allowed_prefixes):
+            raise AssertionError("Found string '%s' matching no expected prefix: %s"
+                                 % (string, allowed_prefixes))
+
+
 class FlameLaunchesTest(FlameFlowTestConfiguration):
     """Verifies Flame is launched with nop chain by requesting a couple web endpoints."""
 
@@ -69,12 +77,43 @@ class FlameLaunchesTest(FlameFlowTestConfiguration):
 
         root_request = requests.get(flame_url)
         assert root_request.ok, 'Expected OK response when fetching main page: %s' % root_request.status_code
-        # TODO: could query for all linked resources to make sure their accessible, but that might be overkill.
+
+        # Since there is no central_server supplied, expect all resources to be served relatively.
+        main_page_bs = BeautifulSoup(root_request.content, 'html.parser')
+        main_page_link_hrefs = [l['href'] for l in main_page_bs.find_all('link')]
+        main_page_script_srcs = [s['src'] for s in main_page_bs.find_all('script') if 'src' in s]
+        page_resource_urls = main_page_link_hrefs + main_page_script_srcs
+        assert_all_match_some_prefix(page_resource_urls, ['/', 'https://fonts.googleapis'])
 
         tasks_api_request = requests.get(flame_url + '/api/tasks')
         assert tasks_api_request.status_code == 200
         task_names = [t['name'] for t in tasks_api_request.json().values()]
         assert self.chain in task_names, "Task API endpoint didn't include executed chain (%s)." % self.chain
+
+
+class FlameLaunchWithCentralServerTest(FlameFlowTestConfiguration):
+    """Verifies Flame UI correctly includes central server when supplied from firexapp."""
+
+    def __init__(self):
+        self.central_server = 'http://some_server.com'
+        self.central_server_ui_path = '/some/path'
+        self.central_server_ui_url = self.central_server + self.central_server_ui_path
+        super().__init__()
+
+    def initial_firex_options(self) -> list:
+        return ["submit", "--chain", 'nop', '--flame_central_server', self.central_server,
+                '--flame_central_server_ui_path', self.central_server_ui_path]
+
+    def assert_on_flame_url(self, log_dir, flame_url):
+        root_request = requests.get(flame_url)
+        assert root_request.ok, 'Expected OK response when fetching main page: %s' % root_request.status_code
+
+        # Since there is no central_server supplied, expect all resources to be served relatively.
+        main_page_bs = BeautifulSoup(root_request.content, 'html.parser')
+        main_page_link_hrefs = [l['href'] for l in main_page_bs.find_all('link')]
+        main_page_script_srcs = [s['src'] for s in main_page_bs.find_all('script') if 'src' in s]
+        page_resource_urls = main_page_link_hrefs + main_page_script_srcs
+        assert_all_match_some_prefix(page_resource_urls, [self.central_server_ui_url, 'https://fonts.googleapis'])
 
 
 class FlameTimeoutShutdownTest(FlameFlowTestConfiguration):

@@ -21,6 +21,7 @@ setup(name='firex_flame',
             # e.g 0.20.x means this server adheres to contract version 0.20 between UI and server.
             "firex_flame_ui<0.21",
             "requests",
+            "beautifulsoup4",
       ],
       package_data={
         'firex_flame': ['templates/*.html'],

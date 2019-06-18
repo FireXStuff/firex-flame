@@ -52,6 +52,13 @@ class FlameLauncher(TrackingService):
     def extra_cli_arguments(self, arg_parser):
         arg_parser.add_argument('--flame_timeout', help='How long the webserver should run for, in seconds.',
                                 default=DEFAULT_FLAME_TIMEOUT)
+        arg_parser.add_argument('--flame_central_server',
+                                help='Server URL from which flame resources can be fetched to enable browser caching'
+                                     'and client-side settings.',
+                                default=None)
+        arg_parser.add_argument('--flame_central_server_ui_path',
+                                help='Path relative to flame_central_server from which the Flame UI is served.',
+                                default=None)
 
     def start(self, args, port=None, uid=None, **kwargs)->{}:
         # store sync & port state for later
@@ -68,7 +75,8 @@ class FlameLauncher(TrackingService):
             'logs_dir': uid.logs_dir,
             'chain': args.chain,
             'recording': rec_file,
-            'central_server': kwargs.get('central_firex_server', None),
+            'central_server': args.flame_central_server,
+            'central_server_ui_path': args.flame_central_server_ui_path,
             'flame_timeout': args.flame_timeout,
             'broker_recv_ready_file': broker_recv_ready_file,
         }
