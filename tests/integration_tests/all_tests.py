@@ -195,7 +195,7 @@ class FlameRevokeSuccessTest(FlameFlowTestConfiguration):
         assert sleep_exists, "Sleep task doesn't exist in the flame rec file, something is wrong with run."
         sleep_task = get_tasks_by_name(log_dir, 'sleep', expect_single=True)
         assert sleep_task['state'] == 'task-incomplete', \
-          "Expected incomplete sleep, but found %s" % sleep_task['state']
+            "Expected incomplete sleep, but found %s" % sleep_task['state']
 
         sio_client = socketio.Client()
         resp = {'response': None}
@@ -210,7 +210,7 @@ class FlameRevokeSuccessTest(FlameFlowTestConfiguration):
             resp['response'] = 'revoke-failed'
 
         sio_client.connect(flame_url)
-        sio_client.emit('revoke-task', data='This is not a UUID.')
+        sio_client.emit('revoke-task', data=sleep_task['uuid'])
         wait_until(lambda: resp['response'] is not None, timeout=60, sleep_for=1)
         sio_client.disconnect()
 
