@@ -228,7 +228,7 @@ class FlameRevokeSuccessTest(FlameFlowTestConfiguration):
 
     def initial_firex_options(self) -> list:
         # Sleep so that assert_on_flame_url can call revoke while the run is incomplete.
-        return ["submit", "--chain", 'sleep', '--sleep', '30']
+        return ["submit", "--chain", 'sleep', '--sleep', '90']
 
     def assert_on_flame_url(self, log_dir, flame_url):
         sleep_exists = wait_until_task_name_exists(log_dir, 'sleep')
