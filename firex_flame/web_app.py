@@ -10,7 +10,7 @@ from flask_autoindex import AutoIndexBlueprint
 logger = logging.getLogger(__name__)
 
 UI_RESOURCE_DIR = pkg_resources.resource_filename('firex_flame_ui', './')
-RELATIVE_UI_PATH = '/ui'
+REL_UI_RESOURCE_PATH = '/ui'
 
 # Never changes per flame instance, populated on first query.
 cached_ui_index_response = None
@@ -62,7 +62,7 @@ def create_ui_root_render_function(central_server, central_server_ui_path):
         global cached_ui_index_response
 
         if not cached_ui_index_response:
-            relative_links_and_scripts = ui_resource_links_and_scripts(RELATIVE_UI_PATH)
+            relative_links_and_scripts = ui_resource_links_and_scripts(REL_UI_RESOURCE_PATH)
 
             if central_server_ui_url:
                 # central_resource_root = 'http://firex.cisco.com/auto/firex/flame'
@@ -94,14 +94,17 @@ def create_web_app(logs_dir, central_server, central_server_ui_path):
                          create_ui_root_render_function(central_server, central_server_ui_path))
 
     # Serve UI artifacts relatively.
-    web_app.add_url_rule(RELATIVE_UI_PATH + '/<path:f>', 'ui_artifacts',
+    web_app.add_url_rule(REL_UI_RESOURCE_PATH + '/<path:f>', 'ui_artifacts',
                          lambda f: send_from_directory(UI_RESOURCE_DIR, f))
 
     # img assets are un-prefixed in build artifacts, so redirect.
-    web_app.add_url_rule('/img/<path:p>', 'ui_img_artifacts', lambda p: redirect(RELATIVE_UI_PATH + '/img/' + p))
+    web_app.add_url_rule('/img/<path:p>', 'ui_img_artifacts', lambda p: redirect(REL_UI_RESOURCE_PATH + '/img/' + p))
 
     # Trivial 'OK' endpoint
     web_app.add_url_rule('/alive', 'alive', lambda: ('', 200))
+
+    # Redirect for old URLs. These links should be updated in emails etc, then this redirect removed.
+    web_app.add_url_rule('/root/<uuid>', 'subtree', lambda uuid: redirect('/#/root/' + uuid))
 
     # Add directory listings and file serve for logs.
     auto_index = Blueprint('auto_index', __name__)
