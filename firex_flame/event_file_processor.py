@@ -35,8 +35,11 @@ def dumper_main():
     dump_data_model(args.dest_dir, aggregator.tasks_by_uuid)
 
 
-def get_tasks_from_log_dir(log_dir):
-    rec_file = get_rec_file(log_dir)
+def get_tasks_from_log_dir(log_dir, rec_filepath=None):
+    if not rec_filepath:
+        rec_file = get_rec_file(log_dir)
+    else:
+        rec_file = rec_filepath
     assert os.path.exists(rec_file), "Recording file not found: %s" % rec_file
     aggregator = FlameEventAggregator()
     process_recording_file(aggregator, rec_file)

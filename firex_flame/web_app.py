@@ -4,7 +4,7 @@ import os
 import pkg_resources
 import urllib.parse
 
-from flask import Flask, Blueprint, redirect, send_from_directory, Response, render_template, redirect
+from flask import Flask, Blueprint, redirect, send_from_directory, Response, render_template
 from flask_autoindex import AutoIndexBlueprint
 
 logger = logging.getLogger(__name__)
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 UI_RESOURCE_DIR = pkg_resources.resource_filename('firex_flame_ui', './')
 REL_UI_RESOURCE_PATH = '/ui'
 
-# Never changes per flame instance, populated on first query.
+# Never changes per flame instance, populated on first request.
 cached_ui_index_response = None
 
 
@@ -52,7 +52,7 @@ class FlameResponse(Response):
         super(FlameResponse, self).__init__(response, **kwargs)
 
 
-def create_ui_root_render_function(central_server, central_server_ui_path):
+def create_ui_index_render_function(central_server, central_server_ui_path):
     if central_server and central_server_ui_path:
         central_server_ui_url = urllib.parse.urljoin(central_server, central_server_ui_path)
     else:
@@ -91,7 +91,7 @@ def create_web_app(logs_dir, central_server, central_server_ui_path):
 
     # Redirect root path to UI.
     web_app.add_url_rule('/', 'flame_ui',
-                         create_ui_root_render_function(central_server, central_server_ui_path))
+                         create_ui_index_render_function(central_server, central_server_ui_path))
 
     # Serve UI artifacts relatively.
     web_app.add_url_rule(REL_UI_RESOURCE_PATH + '/<path:f>', 'ui_artifacts',
