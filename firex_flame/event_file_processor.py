@@ -17,8 +17,10 @@ def process_recording_file(event_aggregator, recording_file):
             continue
         event = json.loads(event_line)
         event_aggregator.aggregate_events([event])
-    # Kludge incomplete runstates that will never become terminal.
-    event_aggregator.aggregate_events(event_aggregator.generate_incomplete_events())
+
+    if event_aggregator.is_root_complete():
+        # Kludge incomplete runstates that will never become terminal.
+        event_aggregator.aggregate_events(event_aggregator.generate_incomplete_events())
 
 
 def dumper_main():

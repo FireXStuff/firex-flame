@@ -14,6 +14,8 @@ from firexapp.submit.submit import get_log_dir_from_output
 
 from firex_flame.event_file_processor import get_tasks_from_log_dir
 from firex_flame.flame_helper import get_flame_pid, wait_until_pid_not_exist, wait_until, get_rec_file
+from firex_flame.event_aggregator import INCOMPLETE_STATES
+
 
 def flame_url_from_output(cmd_output):
     m = re.search(r'Flame: (http://.*)\n', cmd_output)
@@ -233,7 +235,7 @@ class FlameRevokeSuccessTest(FlameFlowTestConfiguration):
         sleep_exists = wait_until_task_name_exists(log_dir, 'sleep')
         assert sleep_exists, "Sleep task doesn't exist in the flame rec file, something is wrong with run."
         sleep_task = get_tasks_by_name(log_dir, 'sleep', expect_single=True)
-        assert sleep_task['state'] == 'task-incomplete', \
+        assert sleep_task['state'] in INCOMPLETE_STATES, \
             "Expected incomplete sleep, but found %s" % sleep_task['state']
 
         sio_client = socketio.Client()
