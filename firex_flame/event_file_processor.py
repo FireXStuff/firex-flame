@@ -12,6 +12,7 @@ def process_recording_file(event_aggregator, recording_file):
 
     with open(recording_file) as rec:
         event_lines = rec.readlines()
+
     for event_line in event_lines:
         if not event_line:
             continue

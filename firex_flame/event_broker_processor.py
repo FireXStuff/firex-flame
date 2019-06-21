@@ -40,38 +40,48 @@ class BrokerEventConsumerThread(threading.Thread):
                 self.receiver_ready_file.touch()
             self.is_first_receive = False
 
+    def _cleanup_tasks(self):
+        # Create new events that change the run state of incomplete events.
+        incomplete_task_events = self.event_aggregator.generate_incomplete_events()
+        if incomplete_task_events:
+            logger.warning("Forcing runstates of %d incomplete tasks to be terminal." % len(incomplete_task_events))
+        self._aggregate_and_send(incomplete_task_events)
+        self.flame_controller.dump_data_model(self.event_aggregator.tasks_by_uuid)
+
     def run(self):
         self._run_from_broker()
 
     def _run_from_broker(self):
         """Load the events from celery"""
-        # Loop to receive the events from celery.
-        try_interval = 1
-        while not self.event_aggregator.is_root_complete():
-            try:
-                try_interval *= 2
-                with self.celery_app.connection() as conn:
-                    conn.ensure_connection(max_retries=1, interval_start=0)
-                    recv = EventReceiver(conn,
-                                         handlers={"*": self._on_celery_event},
-                                         app=self.celery_app)
-                    try_interval = 1
-                    self._create_receiver_ready_file()
-                    recv.capture(limit=None, timeout=None, wakeup=True)
-            except (KeyboardInterrupt, SystemExit) as e:
-                stop_main_thread(str(e))
-            # pylint: disable=C0321
-            except Exception:
-                if self.event_aggregator.is_root_complete():
-                    return
-                logger.error(traceback.format_exc())
-                time.sleep(try_interval)
-            finally:
-                if self.event_aggregator.is_root_complete():
-                    # Create new events that change the run state of incomplete events.
-                    incomplete_task_events = self.event_aggregator.generate_incomplete_events()
-                    self._aggregate_and_send(incomplete_task_events)
-                    self.flame_controller.dump_data_model(self.event_aggregator.tasks_by_uuid)
+        try:
+            try_interval = 1
+            while not self.event_aggregator.is_root_complete():
+                try:
+                    try_interval *= 2
+                    with self.celery_app.connection() as conn:
+                        conn.ensure_connection(max_retries=1, interval_start=0)
+                        recv = EventReceiver(conn,
+                                             handlers={"*": self._on_celery_event},
+                                             app=self.celery_app)
+                        try_interval = 1
+                        self._create_receiver_ready_file()
+                        recv.capture(limit=None, timeout=None, wakeup=True)
+                except (KeyboardInterrupt, SystemExit) as e:
+                    stop_main_thread(str(e))
+                # pylint: disable=C0321
+                except Exception:
+                    if self.event_aggregator.is_root_complete():
+                        logger.info("Stopping broker receiver due to complete root task.")
+                        return
+                    logger.error(traceback.format_exc())
+                    if try_interval > 32:
+                        # Already waited 63 seconds. Assume broker is shutdown, so stop trying to receive.
+                        logger.warning("Stopping broker receiver due to maximum broker receive retry exceeded."
+                                       " Root task incomplete.")
+                        return
+                    time.sleep(try_interval)
+        finally:
+            self._cleanup_tasks()
 
     def _on_celery_event(self, event):
         """Callback function for when an event is received
