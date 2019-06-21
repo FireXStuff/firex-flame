@@ -220,6 +220,7 @@ class FlameRevokeNonExistantUuidTest(FlameFlowTestConfiguration):
 #   Underlying revoke call (celery_app.control.revoke(uuid, terminate=True) doesn't work in GCP for some reason,
 #   So this test can't be executed there.
 #
+@skip_test
 class FlameRevokeSuccessTest(FlameFlowTestConfiguration):
     """ Uses Flame's SocketIO API to revoke a run. """
 
