@@ -8,7 +8,7 @@ import threading
 
 from firex_flame.main_app import run_flame
 from firex_flame.flame_helper import get_flame_debug_dir, get_flame_pid_file_path, DEFAULT_FLAME_TIMEOUT, \
-    stop_main_thread
+    stop_main_thread, get_flame_url
 
 logger = logging.getLogger(__name__)
 eventlet.monkey_patch()
@@ -71,6 +71,7 @@ def _create_run_metadata(cli_args):
         'chain': cli_args.chain,
         # TODO: externalize.
         'central_documentation_url': 'http://www.firexapp.com/',
+        'flame_url': get_flame_url(cli_args.port),
     }
 
 

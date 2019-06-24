@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 
 def run_flame(broker, web_port, run_metadata, recording_file, broker_receiver_ready_file):
     web_app = create_web_app(run_metadata['logs_dir'],
-                             run_metadata['central_server'], run_metadata['central_server_ui_path'])
+                             run_metadata['central_server'],
+                             run_metadata['central_server_ui_path'])
     sio_server = socketio.Server()
     sio_web_app = socketio.Middleware(sio_server, web_app)
 

@@ -4,6 +4,7 @@ from pathlib import Path
 import psutil
 import time
 import threading
+from socket import gethostname
 import sys
 
 import requests
@@ -73,3 +74,7 @@ def stop_main_thread(reason):
 
 def get_rec_file(log_dir):
     return os.path.join(log_dir, 'flame2.rec')
+
+
+def get_flame_url(port, hostname=gethostname()):
+    return 'http://%s:%d' % (hostname, int(port))

@@ -1,5 +1,4 @@
 import os
-from socket import gethostname
 import subprocess
 import time
 import urllib.parse
@@ -12,16 +11,12 @@ from firexapp.submit.console import setup_console_logging
 from firexapp.submit.uid import Uid
 
 from firex_flame.flame_helper import DEFAULT_FLAME_TIMEOUT, wait_until_web_request_ok, get_flame_debug_dir, \
-    wait_until_path_exist, get_rec_file
+    wait_until_path_exist, get_rec_file, get_flame_url
 
 FLAME_LOG_REGISTRY_KEY = 'FLAME_OUTPUT_LOG_REGISTRY_KEY2'
 FileRegistry().register_file(FLAME_LOG_REGISTRY_KEY, os.path.join(Uid.debug_dirname, 'flame2.stdout'))
 
 logger = setup_console_logging(__name__)
-
-
-def get_flame_url(port, hostname=gethostname()):
-    return 'http://%s:%d' % (hostname, int(port))
 
 
 def wait_webserver_and_celery_recv_ready(flame_url, broker_recv_ready_file):

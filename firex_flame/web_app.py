@@ -97,10 +97,10 @@ def create_web_app(logs_dir, central_server, central_server_ui_path):
     web_app.add_url_rule(REL_UI_RESOURCE_PATH + '/<path:f>', 'ui_artifacts',
                          lambda f: send_from_directory(UI_RESOURCE_DIR, f))
 
-    # img assets are un-prefixed in build artifacts, so redirect.
+    # img assets are un-prefixed in build artifacts, so redirect to served img directory.
     web_app.add_url_rule('/img/<path:p>', 'ui_img_artifacts', lambda p: redirect(REL_UI_RESOURCE_PATH + '/img/' + p))
 
-    # Trivial 'OK' endpoint
+    # Trivial 'OK' endpoint for testing if the server is up.
     web_app.add_url_rule('/alive', 'alive', lambda: ('', 200))
 
     # Redirect for old URLs. These links should be updated in emails etc, then this redirect removed.
