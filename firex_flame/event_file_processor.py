@@ -2,7 +2,7 @@ import argparse
 import os
 import json
 
-from firex_flame.controller import dump_data_model
+from firex_flame.controller import FlameModelDumper
 from firex_flame.event_aggregator import FlameEventAggregator
 from firex_flame.flame_helper import get_rec_file
 
@@ -33,10 +33,11 @@ def dumper_main():
 
     aggregator = FlameEventAggregator()
     process_recording_file(aggregator, args.rec)
-    dump_data_model(args.dest_dir, aggregator.tasks_by_uuid)
+    FlameModelDumper(root_model_dir=args.dest_dir).dump_complete_data_model(aggregator.tasks_by_uuid)
 
 
-def get_tasks_from_log_dir(log_dir, rec_filepath=None):
+def get_tasks_from_log_dir(log_dir=None, rec_filepath=None):
+    assert bool(log_dir) ^ bool(rec_filepath), "Need exclusively either log directory of rec_file path."
     if not rec_filepath:
         rec_file = get_rec_file(log_dir)
     else:

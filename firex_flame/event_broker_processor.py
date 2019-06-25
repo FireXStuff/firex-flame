@@ -46,12 +46,12 @@ class BrokerEventConsumerThread(threading.Thread):
         if incomplete_task_events:
             logger.warning("Forcing runstates of %d incomplete tasks to be terminal." % len(incomplete_task_events))
         self._aggregate_and_send(incomplete_task_events)
-        self.flame_controller.dump_data_model(self.event_aggregator.tasks_by_uuid)
 
     def run(self):
         self._run_from_broker()
 
     def _run_from_broker(self):
+        self.flame_controller.dump_initial_metadata()
         """Load the events from celery"""
         try:
             try_interval = 1
@@ -82,6 +82,7 @@ class BrokerEventConsumerThread(threading.Thread):
                     time.sleep(try_interval)
         finally:
             self._cleanup_tasks()
+            self.flame_controller.dump_complete_data_model(self.event_aggregator.tasks_by_uuid)
 
     def _on_celery_event(self, event):
         """Callback function for when an event is received
@@ -98,4 +99,4 @@ class BrokerEventConsumerThread(threading.Thread):
 
     def _aggregate_and_send(self, events):
         new_data_by_task_uuid = self.event_aggregator.aggregate_events(events)
-        self.flame_controller.send_event(new_data_by_task_uuid)
+        self.flame_controller.send_slim_event(new_data_by_task_uuid)
