@@ -36,10 +36,10 @@ def run_flame(broker, web_port, run_metadata, recording_file, broker_receiver_re
                                                       event_aggregator,
                                                       recording_file,
                                                       broker_receiver_ready_file)
-        create_revoke_api(sio_server, celery_app, event_aggregator.tasks_by_uuid)
+        create_revoke_api(sio_server, web_app, celery_app, event_aggregator.tasks_by_uuid)
 
     create_socketio_task_api(sio_server, event_aggregator, run_metadata)
-    create_rest_task_api(web_app, event_aggregator.tasks_by_uuid)
+    create_rest_task_api(web_app, event_aggregator, run_metadata)
     event_recv_thread.start()
 
     try:
