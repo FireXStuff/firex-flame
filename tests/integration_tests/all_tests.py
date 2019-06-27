@@ -225,6 +225,7 @@ class FlameRevokeSuccessTest(FlameFlowTestConfiguration):
 
     # Don't run with --sync, since this test will revoke the incomplete root task.
     sync = False
+    no_coverage = True
 
     def initial_firex_options(self) -> list:
         # Sleep so that assert_on_flame_url can call revoke while the run is incomplete.
