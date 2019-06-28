@@ -19,12 +19,14 @@ logger = logging.getLogger(__name__)
 class BrokerEventConsumerThread(threading.Thread):
     """Events threading class
     """
-    def __init__(self, celery_app, flame_controller, event_aggregator, recording_file=None, receiver_ready_file=None):
+    def __init__(self, celery_app, flame_controller, event_aggregator, recording_file=None, receiver_ready_file=None,
+                 max_retry_attempts=None):
         threading.Thread.__init__(self)
         self.celery_app = celery_app
         self.recording_file = recording_file
         self.flame_controller = flame_controller
         self.event_aggregator = event_aggregator
+        self.max_try_interval = 2**max_retry_attempts if max_retry_attempts is not None else 32
 
         if receiver_ready_file:
             self.receiver_ready_file = Path(receiver_ready_file)
@@ -74,11 +76,12 @@ class BrokerEventConsumerThread(threading.Thread):
                         logger.info("Stopping broker receiver due to complete root task.")
                         return
                     logger.error(traceback.format_exc())
-                    if try_interval > 32:
+                    if try_interval > self.max_try_interval:
                         # Already waited 63 seconds. Assume broker is shutdown, so stop trying to receive.
                         logger.warning("Stopping broker receiver due to maximum broker receive retry exceeded."
                                        " Root task incomplete.")
                         return
+                    logger.debug("Try interval %d, still worth retrying" % try_interval)
                     time.sleep(try_interval)
         finally:
             self._cleanup_tasks()

@@ -1,6 +1,7 @@
 import abc
 import re
 import os
+import json
 import psutil
 import signal
 import time
@@ -12,9 +13,10 @@ import socketio
 from firexapp.testing.config_base import FlowTestConfiguration, assert_is_good_run, skip_test
 from firexapp.submit.submit import get_log_dir_from_output
 
-from firex_flame.event_file_processor import get_tasks_from_log_dir
+from firex_flame.event_file_processor import get_tasks_from_rec_file
 from firex_flame.flame_helper import get_flame_pid, wait_until_pid_not_exist, wait_until, get_rec_file
-from firex_flame.event_aggregator import INCOMPLETE_STATES
+from firex_flame.event_aggregator import INCOMPLETE_STATES, COMPLETE_STATES
+from firex_flame.controller import get_tasks_slim_file
 
 
 def flame_url_from_output(cmd_output):
@@ -26,10 +28,15 @@ def flame_url_from_output(cmd_output):
 
 def kill_flame(log_dir, sig=signal.SIGKILL):
     flame_pid = get_flame_pid(log_dir)
-    if psutil.pid_exists(flame_pid):
-        os.kill(flame_pid, sig)
-        wait_until_pid_not_exist(flame_pid, timeout=10)
+    kill_and_wait(flame_pid, sig)
     return flame_pid
+
+
+def kill_and_wait(pid, sig=signal.SIGKILL):
+    if psutil.pid_exists(pid):
+        os.kill(pid, sig)
+        wait_until_pid_not_exist(pid, timeout=10)
+    return not psutil.pid_exists(pid)
 
 
 class FlameFlowTestConfiguration(FlowTestConfiguration):
@@ -161,26 +168,51 @@ class FlameSigintShutdownTest(FlameFlowTestConfiguration):
 
 
 def wait_until_root_exists(log_dir, timeout=20, sleep_for=1):
-    return wait_until_tasks_predicate(lambda _, r: r is not None, log_dir, timeout, sleep_for)
+    return wait_until_rec_tasks_predicate(lambda _, r: r is not None, log_dir, timeout, sleep_for)
 
 
-def wait_until_task_name_exists(log_dir, task_name, timeout=20, sleep_for=1):
-    return wait_until_tasks_predicate(lambda ts, _: any(t['name'] == task_name for t in ts.values()),
-                                      log_dir, timeout, sleep_for)
+def wait_until_task_name_exists_in_rec(log_dir, task_name, timeout=20, sleep_for=1):
+    return wait_until_rec_tasks_predicate(lambda ts, _: any(t['name'] == task_name for t in ts.values()),
+                                          log_dir, timeout, sleep_for)
 
 
-def wait_until_tasks_predicate(tasks_pred, log_dir, timeout=20, sleep_for=1):
+def wait_until_model_task_uuid_complete_runstate(log_dir, timeout=20, sleep_for=1):
+    return wait_until_complete_model_tasks_predicate(
+        lambda ts: all(t['state'] in COMPLETE_STATES for t in ts.values()), log_dir, timeout, sleep_for)
+
+
+def read_json(file):
+    with open(file) as fp:
+            return json.load(fp)
+
+
+def wait_until_complete_model_tasks_predicate(tasks_pred, log_dir, timeout=20, sleep_for=1):
+    def until_pred():
+        slim_model_file = get_tasks_slim_file(log_dir)
+        if not os.path.isfile(slim_model_file):
+            return False
+        try:
+            tasks_by_uuid = read_json(slim_model_file)
+        except json.decoder.JSONDecodeError:
+            return False
+        else:
+            return tasks_pred(tasks_by_uuid)
+
+    return wait_until(until_pred, timeout, sleep_for)
+
+
+def wait_until_rec_tasks_predicate(tasks_pred, log_dir, timeout=20, sleep_for=1):
     def until_pred():
         if not os.path.isfile(get_rec_file(log_dir)):
             return False
-        tasks, root_uuid = get_tasks_from_log_dir(log_dir)
+        tasks, root_uuid = get_tasks_from_rec_file(log_dir)
         return tasks_pred(tasks, root_uuid)
 
     return wait_until(until_pred, timeout, sleep_for)
 
 
 def get_tasks_by_name(log_dir, name, expect_single=False):
-    tasks, _ = get_tasks_from_log_dir(log_dir)
+    tasks, _ = get_tasks_from_rec_file(log_dir)
     tasks_with_name = [t for t in tasks.values() if t['name'] == name]
     if expect_single and tasks_with_name:
         nameed_task_count = len(tasks_with_name)
@@ -217,9 +249,6 @@ class FlameRevokeNonExistantUuidTest(FlameFlowTestConfiguration):
                                                  % (FAILED_EVENT, resp['response'])
 
 
-#   Underlying revoke call (celery_app.control.revoke(uuid, terminate=True) doesn't work in GCP for some reason,
-#   So this test can't be executed there.
-#
 class FlameRevokeSuccessTest(FlameFlowTestConfiguration):
     """ Uses Flame's SocketIO API to revoke a run. """
 
@@ -232,7 +261,7 @@ class FlameRevokeSuccessTest(FlameFlowTestConfiguration):
         return ["submit", "--chain", 'sleep', '--sleep', '90']
 
     def assert_on_flame_url(self, log_dir, flame_url):
-        sleep_exists = wait_until_task_name_exists(log_dir, 'sleep')
+        sleep_exists = wait_until_task_name_exists_in_rec(log_dir, 'sleep')
         assert sleep_exists, "Sleep task doesn't exist in the flame rec file, something is wrong with run."
         sleep_task = get_tasks_by_name(log_dir, 'sleep', expect_single=True)
         assert sleep_task['state'] in INCOMPLETE_STATES, \
@@ -262,3 +291,32 @@ class FlameRevokeSuccessTest(FlameFlowTestConfiguration):
         sleep_task_after_revoke = get_tasks_by_name(log_dir, 'sleep', expect_single=True)
         sleep_runstate = sleep_task_after_revoke['state']
         assert sleep_runstate == 'task-revoked', "Expected sleep runstate to be revoked, was %s" % sleep_runstate
+
+
+class FlameRedisKillCleanupTest(FlameFlowTestConfiguration):
+    """ Kills redis and confirms flame kludges run states to be terminal """
+
+    # Don't run with --sync, since this test will revoke the incomplete root task.
+    sync = False
+
+    def initial_firex_options(self) -> list:
+        # Sleep so that assert_on_flame_url can kill redis and verify the data is clean up.
+        return ["submit", "--chain", 'sleep', '--sleep', '30', '--broker_max_retry_attempts', '2']
+
+    def assert_on_flame_url(self, log_dir, flame_url):
+        sleep_exists = wait_until_task_name_exists_in_rec(log_dir, 'sleep')
+        assert sleep_exists, "Sleep task doesn't exist in the flame rec file, something is wrong with run."
+
+        from pathlib import Path
+        redis_pid = int(Path(log_dir,'debug', 'redis', 'redis.pid').read_text())
+        redis_killed = kill_and_wait(redis_pid, sig=signal.SIGKILL)
+        assert redis_killed, "Failed to kill redis with pid %s" % redis_pid
+
+        wait_until_model_task_uuid_complete_runstate(log_dir)
+
+        runstates = [t['state'] for t in read_json(get_tasks_slim_file(log_dir)).values()]
+        assert all(s == 'task-incomplete' for s in runstates), \
+            "Expected all tasks incomplete, but found %s" % runstates
+
+        flame_killed = wait_until_pid_not_exist(get_flame_pid(log_dir), timeout=4)
+        assert not flame_killed, 'Flame killed after redis shutdown -- it should survive.'

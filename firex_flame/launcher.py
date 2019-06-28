@@ -54,6 +54,9 @@ class FlameLauncher(TrackingService):
         arg_parser.add_argument('--flame_central_server_ui_path',
                                 help='Path relative to flame_central_server from which the Flame UI is served.',
                                 default=None)
+        arg_parser.add_argument('--broker_max_retry_attempts',
+                                help='See Flame argument help.',
+                                default=None)
 
     def start(self, args, port=None, uid=None, **kwargs)->{}:
         # store sync & port state for later
@@ -74,6 +77,7 @@ class FlameLauncher(TrackingService):
             'central_server_ui_path': args.flame_central_server_ui_path,
             'flame_timeout': args.flame_timeout,
             'broker_recv_ready_file': broker_recv_ready_file,
+            'broker_max_retry_attempts': args.broker_max_retry_attempts,
         }
 
         non_empty_args_strs = ['--%s %s' % (k, v) for k, v in cmd_args.items() if v]

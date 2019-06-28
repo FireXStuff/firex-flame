@@ -32,6 +32,14 @@ def _parse_args():
                         default=DEFAULT_FLAME_TIMEOUT)
     parser.add_argument('--broker_recv_ready_file', help='File to create immediately before capturing celery events.',
                         default=None)
+    parser.add_argument('--broker_max_retry_attempts',
+                        help='Number of retry attempts if connection with broker is lost. '
+                             'Retries are backed-off exponentially with base 2,'
+                             'so a value of 3 here with cause sleeps between retries of '
+                             '1 sec, 2 sec, 4 sec, before giving up on retries. Default waits at least a total of '
+                             '63 seconds before giving up on retries.',
+                        type=int,
+                        default=5)
     return parser.parse_args()
 
 
@@ -85,7 +93,8 @@ def main():
     try:
         t.start()
         logger.info('Starting Flame Server with args: %s' % args)
-        run_flame(args.broker, args.port, _create_run_metadata(args), args.recording, args.broker_recv_ready_file)
+        run_flame(args.broker, args.port, _create_run_metadata(args), args.recording, args.broker_recv_ready_file,
+                  args.broker_max_retry_attempts)
         t.cancel()
     except Exception as e:
         logger.exception(e)

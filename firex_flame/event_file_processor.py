@@ -36,7 +36,7 @@ def dumper_main():
     FlameModelDumper(root_model_dir=args.dest_dir).dump_complete_data_model(aggregator.tasks_by_uuid)
 
 
-def get_tasks_from_log_dir(log_dir=None, rec_filepath=None):
+def get_tasks_from_rec_file(log_dir=None, rec_filepath=None):
     assert bool(log_dir) ^ bool(rec_filepath), "Need exclusively either log directory of rec_file path."
     if not rec_filepath:
         rec_file = get_rec_file(log_dir)

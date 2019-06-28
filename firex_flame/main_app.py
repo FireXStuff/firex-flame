@@ -17,7 +17,7 @@ from firex_flame.web_app import create_web_app
 logger = logging.getLogger(__name__)
 
 
-def run_flame(broker, web_port, run_metadata, recording_file, broker_receiver_ready_file):
+def run_flame(broker, web_port, run_metadata, recording_file, broker_receiver_ready_file, broker_max_retry_attempts):
     web_app = create_web_app(run_metadata['logs_dir'],
                              run_metadata['central_server'],
                              run_metadata['central_server_ui_path'])
@@ -35,7 +35,9 @@ def run_flame(broker, web_port, run_metadata, recording_file, broker_receiver_re
                                                       controller,
                                                       event_aggregator,
                                                       recording_file,
-                                                      broker_receiver_ready_file)
+                                                      broker_receiver_ready_file,
+                                                      broker_max_retry_attempts,
+                                                      )
         create_revoke_api(sio_server, web_app, celery_app, event_aggregator.tasks_by_uuid)
 
     create_socketio_task_api(sio_server, event_aggregator, run_metadata)
