@@ -45,7 +45,7 @@ class FlameLauncher(TrackingService):
         self.port = -1
 
     def extra_cli_arguments(self, arg_parser):
-        arg_parser.add_argument('--flame_timeout', help='How long the webserver should run for, in seconds.',
+        arg_parser.add_argument('--flame2_timeout', help='How long the webserver should run for, in seconds.',
                                 default=DEFAULT_FLAME_TIMEOUT)
         arg_parser.add_argument('--flame_central_server',
                                 help='Server URL from which flame resources can be fetched to enable browser caching'
@@ -75,7 +75,7 @@ class FlameLauncher(TrackingService):
             'recording': rec_file,
             'central_server': args.flame_central_server,
             'central_server_ui_path': args.flame_central_server_ui_path,
-            'flame_timeout': args.flame_timeout,
+            'flame2_timeout': args.flame2_timeout,
             'broker_recv_ready_file': broker_recv_ready_file,
             'broker_max_retry_attempts': args.broker_max_retry_attempts,
         }
@@ -87,13 +87,12 @@ class FlameLauncher(TrackingService):
         flame_stdout = FileRegistry().get_file(FLAME_LOG_REGISTRY_KEY, uid.logs_dir)
         with open(flame_stdout, 'wb') as out:
             subprocess.check_call(cmd, shell=True, stdout=out, stderr=subprocess.STDOUT)
-        # TODO: also wait for celery event listener be up.
+
         flame_url = get_flame_url(self.port)
         wait_webserver_and_celery_recv_ready(flame_url, broker_recv_ready_file)
-
         logger.info('Flame: %s' % flame_url)
 
-    # TODO: this mechanism is unreliable.
+    # TODO: this mechanism is unreliable. Launcher contract should include a before_giveup_console() method.
     def __del__(self):
         if not self.sync:
             print('See Flame to monitor the status of your run at: %s' % get_flame_url(self.port))
