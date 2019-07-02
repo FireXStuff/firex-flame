@@ -92,7 +92,8 @@ class FlameLauncher(TrackingService):
         wait_webserver_and_celery_recv_ready(flame_url, broker_recv_ready_file)
         logger.info('Flame: %s' % flame_url)
 
-    # TODO: this mechanism is unreliable. Launcher contract should include a before_giveup_console() method.
+    # TODO: this mechanism is unreliable.
+    #  Launcher contract should include a before_giveup_console() method or something.
     def __del__(self):
         if not self.sync:
             print('See Flame to monitor the status of your run at: %s' % get_flame_url(self.port))

@@ -10,7 +10,7 @@ import urllib.parse
 
 from bs4 import BeautifulSoup
 import socketio
-from firexapp.testing.config_base import FlowTestConfiguration, assert_is_good_run, skip_test
+from firexapp.testing.config_base import FlowTestConfiguration, assert_is_good_run
 from firexapp.submit.submit import get_log_dir_from_output
 
 from firex_flame.event_file_processor import get_tasks_from_rec_file
@@ -133,7 +133,7 @@ class FlameTimeoutShutdownTest(FlameFlowTestConfiguration):
         super().__init__()
 
     def initial_firex_options(self) -> list:
-        return ["submit", "--chain", 'nop', '--flame_timeout', str(self.flame_timeout)]
+        return ["submit", "--chain", 'nop', '--flame2_timeout', str(self.flame_timeout)]
 
     def assert_on_flame_url(self, log_dir, flame_url):
         time.sleep(self.flame_timeout + 1)
