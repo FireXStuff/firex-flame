@@ -133,7 +133,7 @@ class FlameTimeoutShutdownTest(FlameFlowTestConfiguration):
         super().__init__()
 
     def initial_firex_options(self) -> list:
-        return ["submit", "--chain", 'nop', '--flame2_timeout', str(self.flame_timeout)]
+        return ["submit", "--chain", 'nop', '--flame_timeout', str(self.flame_timeout)]
 
     def assert_on_flame_url(self, log_dir, flame_url):
         time.sleep(self.flame_timeout + 1)

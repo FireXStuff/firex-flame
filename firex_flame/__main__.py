@@ -28,7 +28,7 @@ def _parse_args():
                         default=None)
     # TODO: could validate either rec file exists or broker is supplied.
     parser.add_argument('--broker', help='Celery broker.', default=None)
-    parser.add_argument('--flame2_timeout', help='Maximum lifetime of this service, in seconds', type=int,
+    parser.add_argument('--flame_timeout', help='Maximum lifetime of this service, in seconds', type=int,
                         default=DEFAULT_FLAME_TIMEOUT)
     parser.add_argument('--broker_recv_ready_file', help='File to create immediately before capturing celery events.',
                         default=None)
@@ -89,7 +89,7 @@ def main():
 
     args = _parse_args()
     _config_logging(args.logs_dir)
-    t = threading.Timer(args.flame2_timeout, _exit_on_timeout)
+    t = threading.Timer(args.flame_timeout, _exit_on_timeout)
     try:
         t.start()
         logger.info('Starting Flame Server with args: %s' % args)

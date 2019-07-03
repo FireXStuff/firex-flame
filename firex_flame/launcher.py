@@ -45,7 +45,7 @@ class FlameLauncher(TrackingService):
         self.port = -1
 
     def extra_cli_arguments(self, arg_parser):
-        arg_parser.add_argument('--flame2_timeout', help='How long the webserver should run for, in seconds.',
+        arg_parser.add_argument('--flame_timeout', help='How long the webserver should run for, in seconds.',
                                 default=DEFAULT_FLAME_TIMEOUT)
         arg_parser.add_argument('--flame_central_server',
                                 help='Server URL from which flame resources can be fetched to enable browser caching'
@@ -57,12 +57,21 @@ class FlameLauncher(TrackingService):
         arg_parser.add_argument('--broker_max_retry_attempts',
                                 help='See Flame argument help.',
                                 default=None)
+        arg_parser.add_argument('--flame_record',
+                                help='A file to record flame events',
+                                default=None)
+        arg_parser.add_argument('--flame_port',
+                                help='Flame port to be used', type=int,
+                                default=None)
 
-    def start(self, args, port=None, uid=None, **kwargs)->{}:
+    def start(self, args, uid=None, **kwargs)->{}:
         # store sync & port state for later
         self.sync = args.sync
-        self.port = int(port) if port else get_available_port()
-        rec_file = get_rec_file(uid.logs_dir)
+        self.port = int(args.flame_port) if args.flame_port else get_available_port()
+        if args.flame_record:
+            rec_file = args.flame_record
+        else:
+            rec_file = get_rec_file(uid.logs_dir)
         broker_recv_ready_file = os.path.join(get_flame_debug_dir(uid.logs_dir), 'celery_receiver_ready')
 
         # assemble startup cmd
@@ -75,7 +84,7 @@ class FlameLauncher(TrackingService):
             'recording': rec_file,
             'central_server': args.flame_central_server,
             'central_server_ui_path': args.flame_central_server_ui_path,
-            'flame2_timeout': args.flame2_timeout,
+            'flame_timeout': args.flame_timeout,
             'broker_recv_ready_file': broker_recv_ready_file,
             'broker_max_retry_attempts': args.broker_max_retry_attempts,
         }
@@ -91,9 +100,4 @@ class FlameLauncher(TrackingService):
         flame_url = get_flame_url(self.port)
         wait_webserver_and_celery_recv_ready(flame_url, broker_recv_ready_file)
         logger.info('Flame: %s' % flame_url)
-
-    # TODO: this mechanism is unreliable.
-    #  Launcher contract should include a before_giveup_console() method or something.
-    def __del__(self):
-        if not self.sync:
-            print('See Flame to monitor the status of your run at: %s' % get_flame_url(self.port))
+        return {"flame_port": self.port}
