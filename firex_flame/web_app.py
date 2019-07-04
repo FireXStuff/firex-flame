@@ -1,4 +1,5 @@
 from glob import glob
+import json
 import logging
 import os
 import pkg_resources
@@ -83,7 +84,24 @@ def create_ui_index_render_function(central_server, central_server_ui_path):
     return ui_root_render
 
 
-def create_web_app(logs_dir, central_server, central_server_ui_path):
+def ok_json_response(response):
+    r = Response(response=json.dumps(response), status=200, mimetype="application/json")
+    r.cache_control.max_age = 2592000
+    return r
+
+
+def create_ui_config(run_metadata):
+    return {
+        "access_mode": 'socketio-origin',
+        "model_path_template": None,
+        "redirect_to_alive_flame": False,
+        "central_server": run_metadata['central_server'],
+        "central_server_ui_path": run_metadata['central_server_ui_path'],
+        "central_documentation_url": run_metadata['central_documentation_url'],
+    }
+
+
+def create_web_app(run_metadata):
     web_app = Flask(__name__)
     web_app.response_class = FlameResponse
     web_app.secret_key = os.urandom(24)
@@ -91,7 +109,9 @@ def create_web_app(logs_dir, central_server, central_server_ui_path):
 
     # Redirect root path to UI.
     web_app.add_url_rule('/', 'flame_ui',
-                         create_ui_index_render_function(central_server, central_server_ui_path))
+                         # TODO: set cache control.
+                         create_ui_index_render_function(run_metadata['central_server'],
+                                                         run_metadata['central_server_ui_path']))
 
     # Serve UI artifacts relatively.
     web_app.add_url_rule(REL_UI_RESOURCE_PATH + '/<path:f>', 'ui_artifacts',
@@ -99,6 +119,9 @@ def create_web_app(logs_dir, central_server, central_server_ui_path):
 
     # img assets are un-prefixed in build artifacts, so redirect to served img directory.
     web_app.add_url_rule('/img/<path:p>', 'ui_img_artifacts', lambda p: redirect(REL_UI_RESOURCE_PATH + '/img/' + p))
+
+    ui_config = create_ui_config(run_metadata)
+    web_app.add_url_rule('/flame-ui-config.json', 'ui_config', lambda: ok_json_response(ui_config))
 
     # Trivial 'OK' endpoint for testing if the server is up.
     web_app.add_url_rule('/alive', 'alive', lambda: ('', 200))
@@ -108,7 +131,7 @@ def create_web_app(logs_dir, central_server, central_server_ui_path):
 
     # Add directory listings and file serve for logs.
     auto_index = Blueprint('auto_index', __name__)
-    AutoIndexBlueprint(auto_index, browse_root=logs_dir)
-    web_app.register_blueprint(auto_index, url_prefix=logs_dir)
+    AutoIndexBlueprint(auto_index, browse_root=run_metadata['logs_dir'])
+    web_app.register_blueprint(auto_index, url_prefix=run_metadata['logs_dir'])
 
     return web_app
