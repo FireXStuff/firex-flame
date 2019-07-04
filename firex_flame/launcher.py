@@ -94,7 +94,12 @@ class FlameLauncher(TrackingService):
             'terminate_on_complete': args.flame_terminate_on_complete,
         }
 
-        non_empty_args_strs = ['--%s %s' % (k, v) for k, v in cmd_args.items() if v]
+        def protect_arg(arg):
+            arg = str(arg)
+            if ' ' in arg:
+                return '\"%s\"' % arg
+            return arg
+        non_empty_args_strs = ['--%s %s' % (k, protect_arg(v)) for k, v in cmd_args.items() if v]
         cmd = 'firex_flame %s &' % ' '.join(non_empty_args_strs)
 
         # start the flame service and return the port
