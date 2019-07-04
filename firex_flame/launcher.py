@@ -63,6 +63,10 @@ class FlameLauncher(TrackingService):
         arg_parser.add_argument('--flame_port',
                                 help='Flame port to be used', type=int,
                                 default=None)
+        arg_parser.add_argument('--flame_terminate_on_complete',
+                                help='Terminate Flame when run completes. Ignores timeout arg entirely.',
+                                type=bool,
+                                default=False)
 
     def start(self, args, uid=None, **kwargs)->{}:
         # store sync & port state for later
@@ -87,6 +91,7 @@ class FlameLauncher(TrackingService):
             'flame_timeout': args.flame_timeout,
             'broker_recv_ready_file': broker_recv_ready_file,
             'broker_max_retry_attempts': args.broker_max_retry_attempts,
+            'terminate_on_complete': args.flame_terminate_on_complete,
         }
 
         non_empty_args_strs = ['--%s %s' % (k, v) for k, v in cmd_args.items() if v]

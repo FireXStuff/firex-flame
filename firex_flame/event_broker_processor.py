@@ -16,20 +16,30 @@ from firex_flame.flame_helper import stop_main_thread
 logger = logging.getLogger(__name__)
 
 
+class BrokerConsumerConfig:
+
+    def __init__(self, broker_url, max_retry_attempts, receiver_ready_file, terminate_on_complete):
+        self.broker_url = broker_url
+        self.max_retry_attempts = max_retry_attempts
+        self.receiver_ready_file = receiver_ready_file
+        self.terminate_on_complete = terminate_on_complete
+
+
 class BrokerEventConsumerThread(threading.Thread):
     """Events threading class
     """
-    def __init__(self, celery_app, flame_controller, event_aggregator, recording_file=None, receiver_ready_file=None,
-                 max_retry_attempts=None):
+    def __init__(self, celery_app, flame_controller, event_aggregator, config, recording_file):
         threading.Thread.__init__(self)
         self.celery_app = celery_app
         self.recording_file = recording_file
         self.flame_controller = flame_controller
         self.event_aggregator = event_aggregator
-        self.max_try_interval = 2**max_retry_attempts if max_retry_attempts is not None else 32
+        self.max_try_interval = 2**config.max_retry_attempts if config.max_retry_attempts is not None else 32
+        self.terminate_on_complete = config.terminate_on_complete
+        self.stopped_externally = False
 
-        if receiver_ready_file:
-            self.receiver_ready_file = Path(receiver_ready_file)
+        if config.receiver_ready_file:
+            self.receiver_ready_file = Path(config.receiver_ready_file)
             assert not self.receiver_ready_file.exists(), \
                 "Receiver ready file must not already exist: %s." % self.receiver_ready_file
         else:
@@ -56,36 +66,41 @@ class BrokerEventConsumerThread(threading.Thread):
         self.flame_controller.dump_initial_metadata()
         """Load the events from celery"""
         try:
-            try_interval = 1
-            while not self.event_aggregator.is_root_complete():
-                try:
-                    try_interval *= 2
-                    with self.celery_app.connection() as conn:
-                        conn.ensure_connection(max_retries=1, interval_start=0)
-                        recv = EventReceiver(conn,
-                                             handlers={"*": self._on_celery_event},
-                                             app=self.celery_app)
-                        try_interval = 1
-                        self._create_receiver_ready_file()
-                        recv.capture(limit=None, timeout=None, wakeup=True)
-                except (KeyboardInterrupt, SystemExit) as e:
-                    stop_main_thread(str(e))
-                # pylint: disable=C0321
-                except Exception:
-                    if self.event_aggregator.is_root_complete():
-                        logger.info("Stopping broker receiver due to complete root task.")
-                        return
-                    logger.error(traceback.format_exc())
-                    if try_interval > self.max_try_interval:
-                        # Already waited 63 seconds. Assume broker is shutdown, so stop trying to receive.
-                        logger.warning("Stopping broker receiver due to maximum broker receive retry exceeded."
-                                       " Root task incomplete.")
-                        return
-                    logger.debug("Try interval %d, still worth retrying" % try_interval)
-                    time.sleep(try_interval)
+            self._capture_events()
         finally:
             self._cleanup_tasks()
             self.flame_controller.dump_complete_data_model(self.event_aggregator.tasks_by_uuid)
+            if self.terminate_on_complete and not self.stopped_externally:
+                stop_main_thread("Terminating on completion, as requested by input args.")
+
+    def _capture_events(self):
+        try_interval = 1
+        while not self.event_aggregator.is_root_complete():
+            try:
+                try_interval *= 2
+                with self.celery_app.connection() as conn:
+                    conn.ensure_connection(max_retries=1, interval_start=0)
+                    recv = EventReceiver(conn,
+                                         handlers={"*": self._on_celery_event},
+                                         app=self.celery_app)
+                    try_interval = 1
+                    self._create_receiver_ready_file()
+                    recv.capture(limit=None, timeout=None, wakeup=True)
+            except (KeyboardInterrupt, SystemExit) as e:
+                self.stopped_externally = True
+                stop_main_thread(str(e))
+            # pylint: disable=C0321
+            except Exception:
+                if self.event_aggregator.is_root_complete():
+                    logger.info("Stopping broker receiver due to complete root task.")
+                    return
+                logger.error(traceback.format_exc())
+                if try_interval > self.max_try_interval:
+                    logger.warning("Maximum broker retry attempts exceeded."
+                                   " Will no longer retry despite incomplete root task.")
+                    return
+                logger.debug("Try interval %d secs, still worth retrying." % try_interval)
+                time.sleep(try_interval)
 
     def _on_celery_event(self, event):
         """Callback function for when an event is received

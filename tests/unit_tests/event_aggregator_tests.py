@@ -110,4 +110,6 @@ class EventAggregatorTests(unittest.TestCase):
         event1 = {**basic_event, 'url': 'some_url'}
 
         aggregator.aggregate_events([event1])
+        # The rule for the celery key 'url' creates a new key 'logs_url'. This test verifies non-celery keys are
+        # propagated.
         self.assertEqual('some_url', aggregator.tasks_by_uuid[basic_event['uuid']]['logs_url'])

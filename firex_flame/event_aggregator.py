@@ -164,7 +164,8 @@ def get_new_event_data(event):
 
 
 def find_data_changes(task, new_task_data):
-    # Some fields overwrite whatever is present.
+    # Some fields overwrite whatever is present. Be permissive, since not all fields captured are from celery,
+    # so not all have entries in the field config.
     override_dict = {k: v for k, v in new_task_data.items() if k not in AGGREGATE_NO_OVERWRITE_FIELDS}
 
     changed_data = {}

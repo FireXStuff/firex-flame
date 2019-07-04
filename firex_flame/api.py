@@ -130,5 +130,7 @@ def create_revoke_api(sio_server, web_app, celery_app, tasks):
         if not revoked:
             logger.warning("Failed to revoke task: waited %s sec and runstate is currently %s"
                            % (revoke_timeout, task_runstate))
+        else:
+            logger.debug("Successfully revoked task %s." % uuid)
 
         return revoked  # If the task was successfully revoked, return true

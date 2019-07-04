@@ -67,6 +67,12 @@ def assert_all_match_some_prefix(strs, allowed_prefixes):
                                  % (string, allowed_prefixes))
 
 
+def assert_flame_web_ok(flame_url, path):
+    alive_url = urllib.parse.urljoin(flame_url, path)
+    alive_request = requests.get(alive_url)
+    assert alive_request.ok, 'Expected OK response when fetching %s resource page: %s' % (alive_url, path)
+
+
 class FlameLaunchesTest(FlameFlowTestConfiguration):
     """Verifies Flame is launched with nop chain by requesting a couple web endpoints."""
 
@@ -79,10 +85,7 @@ class FlameLaunchesTest(FlameFlowTestConfiguration):
 
     def assert_on_flame_url(self, log_dir, flame_url):
         assert get_flame_pid(log_dir) > 0, "Found no pid: %s" % get_flame_pid(log_dir)
-
-        alive_url = urllib.parse.urljoin(flame_url, '/alive')
-        alive_request = requests.get(alive_url)
-        assert alive_request.ok, 'Expected OK response when fetching alive resource page: %s' % alive_url
+        assert_flame_web_ok(flame_url, '/alive')
 
         root_request = requests.get(flame_url)
         assert root_request.ok, 'Expected OK response when fetching main page: %s' % root_request.status_code
@@ -320,3 +323,32 @@ class FlameRedisKillCleanupTest(FlameFlowTestConfiguration):
 
         flame_killed = wait_until_pid_not_exist(get_flame_pid(log_dir), timeout=4)
         assert not flame_killed, 'Flame killed after redis shutdown -- it should survive.'
+
+
+class FlameTerminateOnCompleteTest(FlameFlowTestConfiguration):
+    """ Tests 'terminate_on_complete' argument """
+
+    # No sync since we'll revoke the run & confirm the web server is no longer active.
+    sync = False
+    no_coverage = True
+
+    def initial_firex_options(self) -> list:
+        return ["submit", "--chain", 'sleep', '--sleep', '30', '--flame_terminate_on_complete', 'True',
+                # Tests timeout is ignored when terminate_on_complete is set.
+                '--flame_timeout', '1']
+
+    def assert_on_flame_url(self, log_dir, flame_url):
+        root_task_exists = wait_until_task_name_exists_in_rec(log_dir, 'RootTask')
+        assert root_task_exists, "Root task doesn't exist in the flame rec file, something is wrong with run."
+
+        # Make sure the web API is stil up after the timeout, since it should be ignored due to terminate_on_complete.
+        time.sleep(1)
+        assert_flame_web_ok(flame_url, '/alive')
+
+        root_task = get_tasks_by_name(log_dir, 'RootTask', expect_single=True)
+        assert_flame_web_ok(flame_url, '/api/revoke/' + root_task['uuid'])
+
+        # Somewhat big timeout since we need to wait for redis to shutdown gracefully, which then causes the
+        # the broker processor to shutdown flame gracefully.
+        flame_killed = wait_until_pid_not_exist(get_flame_pid(log_dir), timeout=30)
+        assert flame_killed, 'Flame not terminated after root revoked, even though terminate_on_complete was supplied.'

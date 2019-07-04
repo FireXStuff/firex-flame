@@ -9,6 +9,7 @@ import threading
 from firex_flame.main_app import run_flame
 from firex_flame.flame_helper import get_flame_debug_dir, get_flame_pid_file_path, DEFAULT_FLAME_TIMEOUT, \
     stop_main_thread, get_flame_url
+from firex_flame.event_broker_processor import BrokerConsumerConfig
 
 logger = logging.getLogger(__name__)
 eventlet.monkey_patch()
@@ -40,6 +41,11 @@ def _parse_args():
                              '63 seconds before giving up on retries.',
                         type=int,
                         default=5)
+    parser.add_argument('--terminate_on_complete',
+                        help='Supply if the flame server should terminate when the run completes. '
+                             'Causes the value of --flame_timeout to be ignored.',
+                        type=bool,
+                        default=False)
     return parser.parse_args()
 
 
@@ -83,18 +89,38 @@ def _create_run_metadata(cli_args):
     }
 
 
+def create_broker_processor_config(args):
+    return BrokerConsumerConfig(args.broker,
+                                args.broker_max_retry_attempts,
+                                args.broker_recv_ready_file,
+                                args.terminate_on_complete)
+
+
+class NoopTimer:
+    def start(self):
+        pass
+
+    def cancel(self):
+        pass
+
+
 def main():
     signal.signal(signal.SIGTERM, _sigterm_handler)
     signal.signal(signal.SIGINT, _sigint_handler)
 
     args = _parse_args()
     _config_logging(args.logs_dir)
-    t = threading.Timer(args.flame_timeout, _exit_on_timeout)
+    if args.terminate_on_complete:
+        t = NoopTimer()
+    else:
+        t = threading.Timer(args.flame_timeout, _exit_on_timeout)
     try:
         t.start()
         logger.info('Starting Flame Server with args: %s' % args)
-        run_flame(args.broker, args.port, _create_run_metadata(args), args.recording, args.broker_recv_ready_file,
-                  args.broker_max_retry_attempts)
+        run_flame(create_broker_processor_config(args),
+                  args.port,
+                  _create_run_metadata(args),
+                  args.recording)
         t.cancel()
     except Exception as e:
         logger.exception(e)

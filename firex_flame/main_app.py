@@ -28,15 +28,14 @@ def run_flame(broker, web_port, run_metadata, recording_file, broker_receiver_re
     if recording_file and os.path.isfile(recording_file):
         event_recv_thread = Thread(target=process_recording_file, args=(event_aggregator, recording_file))
     else:
-        assert broker, "Since recording file doesn't exist, the broker is required."
-        celery_app = celery.Celery(broker=broker)
+        assert broker_consumer_config.broker_url, "Since recording file doesn't exist, the broker is required."
+        celery_app = celery.Celery(broker=broker_consumer_config.broker_url)
         controller = FlameAppController(sio_server, run_metadata)
         event_recv_thread = BrokerEventConsumerThread(celery_app,
                                                       controller,
                                                       event_aggregator,
+                                                      broker_consumer_config,
                                                       recording_file,
-                                                      broker_receiver_ready_file,
-                                                      broker_max_retry_attempts,
                                                       )
         create_revoke_api(sio_server, web_app, celery_app, event_aggregator.tasks_by_uuid)
 
