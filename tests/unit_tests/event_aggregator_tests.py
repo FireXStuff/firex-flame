@@ -103,3 +103,11 @@ class EventAggregatorTests(unittest.TestCase):
             {'state': event2['type'], 'timestamp': event2['timestamp']},
         ]
         self.assertEqual(expected_states, aggregator.tasks_by_uuid[basic_event['uuid']]['states'])
+
+
+    def test_aggregate_non_celery_field(self):
+        aggregator = FlameEventAggregator()
+        event1 = {**basic_event, 'url': 'some_url'}
+
+        aggregator.aggregate_events([event1])
+        self.assertEqual('some_url', aggregator.tasks_by_uuid[basic_event['uuid']]['logs_url'])

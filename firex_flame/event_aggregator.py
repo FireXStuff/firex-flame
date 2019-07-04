@@ -93,7 +93,7 @@ SLIM_FIELDS = _get_keys_with_true(FIELD_CONFIG, 'slim_field')
 
 AGGREGATE_MERGE_FIELDS = _get_keys_with_true(FIELD_CONFIG, 'aggregate_merge')
 AGGREGATE_KEEP_INITIAL_FIELDS = _get_keys_with_true(FIELD_CONFIG, 'aggregate_keep_initial')
-AGGREGATE_OVERWRITE_FIELDS = set(FIELD_CONFIG.keys()).difference(AGGREGATE_MERGE_FIELDS + AGGREGATE_KEEP_INITIAL_FIELDS)
+AGGREGATE_NO_OVERWRITE_FIELDS = AGGREGATE_MERGE_FIELDS + AGGREGATE_KEEP_INITIAL_FIELDS
 
 FIELD_TO_CELERY_TRANSFORMS = {k: v['transform_celery'] for k, v in FIELD_CONFIG.items() if 'transform_celery' in v}
 
@@ -165,7 +165,7 @@ def get_new_event_data(event):
 
 def find_data_changes(task, new_task_data):
     # Some fields overwrite whatever is present.
-    override_dict = {k: v for k, v in new_task_data.items() if k in AGGREGATE_OVERWRITE_FIELDS}
+    override_dict = {k: v for k, v in new_task_data.items() if k not in AGGREGATE_NO_OVERWRITE_FIELDS}
 
     changed_data = {}
     for new_data_key, new_data_val in override_dict.items():
