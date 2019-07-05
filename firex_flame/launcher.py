@@ -65,6 +65,11 @@ class FlameLauncher(TrackingService):
                                 help='Terminate Flame when run completes. Ignores timeout arg entirely.',
                                 type=bool,
                                 default=False)
+        arg_parser.add_argument('--flame_no_wait',
+                                help='Prevent the Flame Launcher from waiting for the Flame webserver '
+                                     '& broker receiver.',
+                                type=bool,
+                                default=False)
 
     def start(self, args, uid=None, **kwargs)->{}:
         port = int(args.flame2_port) if args.flame2_port else get_available_port()
@@ -99,6 +104,7 @@ class FlameLauncher(TrackingService):
             subprocess.check_call(cmd, shell=True, stdout=out, stderr=subprocess.STDOUT)
 
         flame_url = get_flame_url(port)
-        wait_webserver_and_celery_recv_ready(flame_url, broker_recv_ready_file)
+        if not args.flame_no_wait:
+            wait_webserver_and_celery_recv_ready(flame_url, broker_recv_ready_file)
         logger.info('Flame: %s' % flame_url)
         return {"flame_port": port}
