@@ -136,7 +136,7 @@ class FlameTimeoutShutdownTest(FlameFlowTestConfiguration):
         super().__init__()
 
     def initial_firex_options(self) -> list:
-        return ["submit", "--chain", 'nop', '--flame_timeout', str(self.flame_timeout)]
+        return ["submit", "--chain", 'nop', '--flame2_timeout', str(self.flame_timeout)]
 
     def assert_on_flame_url(self, log_dir, flame_url):
         time.sleep(self.flame_timeout + 1)
@@ -335,7 +335,7 @@ class FlameTerminateOnCompleteTest(FlameFlowTestConfiguration):
     def initial_firex_options(self) -> list:
         return ["submit", "--chain", 'sleep', '--sleep', '30', '--flame_terminate_on_complete', 'True',
                 # Tests timeout is ignored when terminate_on_complete is set.
-                '--flame_timeout', '1']
+                '--flame2_timeout', '1']
 
     def assert_on_flame_url(self, log_dir, flame_url):
         root_task_exists = wait_until_task_name_exists_in_rec(log_dir, 'RootTask')
