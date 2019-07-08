@@ -118,8 +118,8 @@ class FlameLauncher(TrackingService):
             subprocess.check_call(cmd, shell=True, stdout=out, stderr=subprocess.STDOUT)
 
         flame_url = get_flame_url(port)
-        if args.flame_startup_wait > 0:
+        if getattr(args, 'flame_startup_wait', 5) > 0:
             wait_webserver_and_celery_recv_ready(flame_url, broker_recv_ready_file, args.flame_startup_wait,
-                                                 args.flame_require_up_after_wait)
+                                                 getattr(args, 'flame_require_up_after_wait', False))
         logger.info('Flame: %s' % flame_url)
         return {"flame_port": port}
