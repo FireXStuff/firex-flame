@@ -16,7 +16,7 @@ from firexapp.submit.submit import get_log_dir_from_output
 from firex_flame.event_file_processor import get_tasks_from_rec_file
 from firex_flame.flame_helper import get_flame_pid, wait_until_pid_not_exist, wait_until, get_rec_file
 from firex_flame.event_aggregator import INCOMPLETE_STATES, COMPLETE_STATES
-from firex_flame.controller import get_tasks_slim_file
+from firex_flame.model_dumper import get_tasks_slim_file
 
 
 def flame_url_from_output(cmd_output):

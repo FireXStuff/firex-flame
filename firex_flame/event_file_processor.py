@@ -2,7 +2,7 @@ import argparse
 import os
 import json
 
-from firex_flame.controller import FlameModelDumper
+from firex_flame.model_dumper import FlameModelDumper
 from firex_flame.event_aggregator import FlameEventAggregator
 from firex_flame.flame_helper import get_rec_file
 
