@@ -4,7 +4,7 @@ import logging
 import os
 from pathlib import Path
 import signal
-import threading
+from threading import Timer
 
 from firex_flame.main_app import run_flame
 from firex_flame.flame_helper import get_flame_debug_dir, get_flame_pid_file_path, DEFAULT_FLAME_TIMEOUT, \
@@ -42,8 +42,8 @@ def _parse_args():
                         type=int,
                         default=5)
     parser.add_argument('--terminate_on_complete',
-                        help='Supply if the flame server should terminate when the run completes. '
-                             'Causes the value of --flame_timeout to be ignored.',
+                        help='Supply if the Flame server should terminate when the run completes. '
+                             'Causes the value of --flame_timeout to be ignored entirely.',
                         type=bool,
                         default=False)
     return parser.parse_args()
@@ -110,10 +110,7 @@ def main():
 
     args = _parse_args()
     _config_logging(args.logs_dir)
-    if args.terminate_on_complete:
-        t = NoopTimer()
-    else:
-        t = threading.Timer(args.flame_timeout, _exit_on_timeout)
+    t = NoopTimer() if args.terminate_on_complete else Timer(args.flame_timeout, _exit_on_timeout)
     try:
         t.start()
         logger.info('Starting Flame Server with args: %s' % args)
@@ -125,4 +122,4 @@ def main():
     except Exception as e:
         logger.exception(e)
     finally:
-        logger.info("Shutting down Flame server.")
+        logger.info("Flame server finished.")

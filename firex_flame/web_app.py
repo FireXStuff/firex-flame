@@ -84,8 +84,8 @@ def create_ui_index_render_function(central_server, central_server_ui_path):
     return ui_root_render
 
 
-def ok_json_response(response):
-    r = Response(response=json.dumps(response), status=200, mimetype="application/json")
+def ok_json_response(response_data):
+    r = Response(response=json.dumps(response_data), status=200, mimetype="application/json")
     r.cache_control.max_age = 2592000
     return r
 
@@ -95,6 +95,7 @@ def create_ui_config(run_metadata):
         "access_mode": 'socketio-origin',
         "model_path_template": None,
         "redirect_to_alive_flame": False,
+        "is_central": False,
         "central_server": run_metadata['central_server'],
         "central_server_ui_path": run_metadata['central_server_ui_path'],
         "central_documentation_url": run_metadata['central_documentation_url'],

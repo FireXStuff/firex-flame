@@ -59,14 +59,14 @@ def _interrupt_main_thread():
     except ImportError:
         # noinspection PyUnresolvedReferences
         import thread
-    logger.info('Exiting main thread')
+    logger.info('Interrupting main thread.')
     thread.interrupt_main()
 
 
 def stop_main_thread(reason):
     logging.info("Stopping for reason: %s" % reason)
     if threading.current_thread() is threading.main_thread():
-        logger.info('sysexit from main thread')
+        logger.info('Stopped from main thread, will sysexit.')
         sys.exit(0)
     else:
         _interrupt_main_thread()

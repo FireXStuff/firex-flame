@@ -19,31 +19,39 @@ FileRegistry().register_file(FLAME_LOG_REGISTRY_KEY, os.path.join(Uid.debug_dirn
 logger = setup_console_logging(__name__)
 
 
-def wait_webserver_and_celery_recv_ready(flame_url, broker_recv_ready_file):
+def wait_webserver_and_celery_recv_ready(flame_url, broker_recv_ready_file, wait_time, fail_if_not_up):
     start_wait = time.perf_counter()
 
     # Wait for web server via HTTP GET.
-    # TODO: parametrize this timeout, maybe even the sleep_for too.
-    webserver_wait_timeout = 30
     webserver_alive = wait_until_web_request_ok(urllib.parse.urljoin(flame_url, '/alive'),
-                                                timeout=webserver_wait_timeout, sleep_for=1)
+                                                timeout=wait_time, sleep_for=1)
     if not webserver_alive:
-        raise Exception("Flame web server at %s not up after %s seconds." % (flame_url, webserver_wait_timeout))
+        if fail_if_not_up:
+            raise Exception("Flame web server at %s not up after %s seconds." % (flame_url, wait_time))
+        else:
+            logger.debug("Flame web server not up after %.1f seconds." % (time.perf_counter() - start_wait))
+
+    waited_so_far = time.perf_counter() - start_wait
+    remaining_wait_time = max(wait_time - waited_so_far, 0)
 
     # Wait for broker ready file to be created by flame.
-    celery_recvr_timeout = 5
-    broker_recv_ready = wait_until_path_exist(broker_recv_ready_file, timeout=celery_recvr_timeout, sleep_for=0.5)
+    broker_recv_ready = wait_until_path_exist(broker_recv_ready_file, timeout=remaining_wait_time, sleep_for=0.5)
     if not broker_recv_ready:
-        raise Exception("Flame celery receiver not ready after %s seconds." % celery_recvr_timeout)
+        if fail_if_not_up:
+            raise Exception("Flame celery receiver not ready after %s seconds." % remaining_wait_time)
+        else:
+            logger.debug("Flame celery receiver not up after %.1f seconds." % (time.perf_counter() - start_wait))
 
-    end_wait = time.perf_counter()
-    logger.debug("Waited %.1f seconds for web server & celery receiver to become ready." % (end_wait - start_wait))
+    if webserver_alive and broker_recv_ready:
+        end_wait = time.perf_counter()
+        logger.debug("Web server & Celery receiver are now ready after waiting %.1f seconds."
+                     % (end_wait - start_wait))
 
 
 class FlameLauncher(TrackingService):
 
     def extra_cli_arguments(self, arg_parser):
-        arg_parser.add_argument('--flame2_timeout', help='How long the webserver should run for, in seconds.',
+        arg_parser.add_argument('--flame_timeout', help='How long the webserver should run for, in seconds.',
                                 default=DEFAULT_FLAME_TIMEOUT)
         arg_parser.add_argument('--flame_central_server',
                                 help='Server URL from which flame resources can be fetched to enable browser caching'
@@ -55,26 +63,32 @@ class FlameLauncher(TrackingService):
         arg_parser.add_argument('--broker_max_retry_attempts',
                                 help='See Flame argument help.',
                                 default=None)
-        arg_parser.add_argument('--flame2_record',
+        arg_parser.add_argument('--flame_record',
                                 help='A file to record flame events',
                                 default=None)
-        arg_parser.add_argument('--flame2_port',
+        arg_parser.add_argument('--flame_port',
                                 help='Flame port to be used', type=int,
                                 default=None)
         arg_parser.add_argument('--flame_terminate_on_complete',
                                 help='Terminate Flame when run completes. Ignores timeout arg entirely.',
                                 type=bool,
                                 default=False)
-        arg_parser.add_argument('--flame_no_wait',
-                                help='Prevent the Flame Launcher from waiting for the Flame webserver '
-                                     '& broker receiver.',
+        arg_parser.add_argument('--flame_require_up_after_wait',
+                                help='Fail the launcher if the Flame webserver & Celery receiver are not up after the '
+                                     'specified wait time. Set the wait time with --flame_startup_wait.',
                                 type=bool,
-                                default=False)
+                                default=None)
+        arg_parser.add_argument('--flame_startup_wait',
+                                help='Maximum number of seconds to wait for Flame web server & celery receiver to come '
+                                     'up. This wait can be disabled with by supplying zero, which implies '
+                                     '--flame_require_up_after_wait.',
+                                type=int,
+                                default=5)
 
     def start(self, args, uid=None, **kwargs)->{}:
-        port = int(args.flame2_port) if args.flame2_port else get_available_port()
-        if args.flame2_record:
-            rec_file = args.flame2_record
+        port = int(args.flame_port) if args.flame_port else get_available_port()
+        if args.flame_record:
+            rec_file = args.flame_record
         else:
             rec_file = get_rec_file(uid.logs_dir)
         broker_recv_ready_file = os.path.join(get_flame_debug_dir(uid.logs_dir), 'celery_receiver_ready')
@@ -89,7 +103,7 @@ class FlameLauncher(TrackingService):
             'recording': rec_file,
             'central_server': args.flame_central_server,
             'central_server_ui_path': args.flame_central_server_ui_path,
-            'flame_timeout': args.flame2_timeout,
+            'flame_timeout': args.flame_timeout,
             'broker_recv_ready_file': broker_recv_ready_file,
             'broker_max_retry_attempts': args.broker_max_retry_attempts,
             'terminate_on_complete': args.flame_terminate_on_complete,
@@ -104,7 +118,8 @@ class FlameLauncher(TrackingService):
             subprocess.check_call(cmd, shell=True, stdout=out, stderr=subprocess.STDOUT)
 
         flame_url = get_flame_url(port)
-        if not args.flame_no_wait:
-            wait_webserver_and_celery_recv_ready(flame_url, broker_recv_ready_file)
+        if args.flame_startup_wait > 0:
+            wait_webserver_and_celery_recv_ready(flame_url, broker_recv_ready_file, args.flame_startup_wait,
+                                                 args.flame_require_up_after_wait)
         logger.info('Flame: %s' % flame_url)
         return {"flame_port": port}
