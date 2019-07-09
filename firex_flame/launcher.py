@@ -14,7 +14,7 @@ from firex_flame.flame_helper import DEFAULT_FLAME_TIMEOUT, wait_until_web_reque
     wait_until_path_exist, get_rec_file, get_flame_url
 
 FLAME_LOG_REGISTRY_KEY = 'FLAME_OUTPUT_LOG_REGISTRY_KEY2'
-FileRegistry().register_file(FLAME_LOG_REGISTRY_KEY, os.path.join(Uid.debug_dirname, 'flame2.stdout'))
+FileRegistry().register_file(FLAME_LOG_REGISTRY_KEY, os.path.join(Uid.debug_dirname, 'flame.stdout'))
 
 logger = setup_console_logging(__name__)
 

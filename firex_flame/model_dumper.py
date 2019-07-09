@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 import tarfile
 
-from firex_flame.event_aggregator import slim_tasks_by_uuid
+from firex_flame.event_aggregator import slim_tasks_by_uuid, COMPLETE_STATES
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ def load_slim_tasks(log_dir):
 
 
 def load_full_task(log_dir, task_uuid):
-    return json.loads(Path(get_all_tasks_dir(firex_logs_dir=log_dir), task_uuid + '.json' ).read_text())
+    return json.loads(Path(get_all_tasks_dir(firex_logs_dir=log_dir), task_uuid + '.json').read_text())
 
 
 def get_full_tasks_by_names(log_dir, task_names):
@@ -71,9 +71,10 @@ class FlameModelDumper:
             self.root_model_dir = root_model_dir
         os.makedirs(self.root_model_dir, exist_ok=True)
 
-    def dump_metadata(self, run_metadata, run_complete):
+    def dump_metadata(self, run_metadata, run_complete, flame_complete):
         metadata_model_file = os.path.join(self.root_model_dir, 'run-metadata.json')
-        _write_json(metadata_model_file, {'run_complete': run_complete, **run_metadata})
+        complete = {'run_complete': run_complete, 'flame_recv_complete': flame_complete}
+        _write_json(metadata_model_file, {**complete, **run_metadata})
         return metadata_model_file
 
     def dump_complete_data_model(self, tasks_by_uuid, run_metadata=None):
@@ -90,8 +91,11 @@ class FlameModelDumper:
 
         paths_to_compress = [slim_tasks_file, full_tasks_dir]
         if run_metadata:
-            # Write metadata file, indicating the run is complete.
-            metadata_model_file = self.dump_metadata(run_metadata, run_complete=True)
+            # Write metadata file.
+            # Note that since a flame can terminate (e.g. via timeout) before a run, there is no gauarantee
+            # that the run_metadata model file will ever have run_complete: true.
+            run_complete = tasks_by_uuid.get(run_metadata['root_uuid'], {'state': None})['state'] in COMPLETE_STATES
+            metadata_model_file = self.dump_metadata(run_metadata, run_complete, flame_complete=True)
             paths_to_compress.append(metadata_model_file)
 
         # Write a tar.gz file containing all the files dumped above.

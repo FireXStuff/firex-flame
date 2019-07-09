@@ -92,11 +92,11 @@ class BrokerEventConsumerThread(threading.Thread):
             # pylint: disable=C0321
             except Exception:
                 if self.event_aggregator.is_root_complete():
-                    logger.info("Stopping broker receiver due to complete root task.")
+                    logger.info("Stopping broker receiver (not entire server) due to complete root task.")
                     return
                 logger.error(traceback.format_exc())
                 if try_interval > self.max_try_interval:
-                    logger.warning("Maximum broker retry attempts exceeded."
+                    logger.warning("Maximum broker retry attempts exceeded, stopping receiver (not entire server)."
                                    " Will no longer retry despite incomplete root task.")
                     return
                 logger.debug("Try interval %d secs, still worth retrying." % try_interval)

@@ -64,7 +64,7 @@ def _interrupt_main_thread():
 
 
 def stop_main_thread(reason):
-    logging.info("Stopping for reason: %s" % reason)
+    logging.info("Stopping entire Flame Server for reason: %s" % reason)
     if threading.current_thread() is threading.main_thread():
         logger.info('Stopped from main thread, will sysexit.')
         sys.exit(0)
@@ -73,7 +73,7 @@ def stop_main_thread(reason):
 
 
 def get_rec_file(log_dir):
-    return os.path.join(log_dir, 'flame2.rec')
+    return os.path.join(log_dir, 'flame.rec')
 
 
 def get_flame_url(port, hostname=gethostname()):
