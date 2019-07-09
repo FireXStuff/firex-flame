@@ -24,5 +24,5 @@ class FlameAppController:
     def dump_initial_metadata(self):
         self.model_dumper.dump_metadata(self.run_metadata, run_complete=False, flame_complete=False)
 
-    def dump_complete_data_model(self, tasks_by_uuid):
-        self.model_dumper.dump_complete_data_model(tasks_by_uuid, self.run_metadata)
+    def dump_complete_data_model(self, event_aggregator):
+        self.model_dumper.dump_complete_data_model(event_aggregator, self.run_metadata)

@@ -69,7 +69,7 @@ class BrokerEventConsumerThread(threading.Thread):
             self._capture_events()
         finally:
             self._cleanup_tasks()
-            self.flame_controller.dump_complete_data_model(self.event_aggregator.tasks_by_uuid)
+            self.flame_controller.dump_complete_data_model(self.event_aggregator)
             if self.terminate_on_complete and not self.stopped_externally:
                 stop_main_thread("Terminating on completion, as requested by input args.")
 
