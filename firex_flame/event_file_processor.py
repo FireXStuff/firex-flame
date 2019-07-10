@@ -1,5 +1,6 @@
 import argparse
 import os
+import gzip
 import json
 
 from firex_flame.model_dumper import FlameModelDumper
@@ -10,8 +11,13 @@ from firex_flame.flame_helper import get_rec_file
 def process_recording_file(event_aggregator, recording_file):
     assert os.path.isfile(recording_file), "Recording file doesn't exist: %s" % recording_file
 
-    with open(recording_file) as rec:
-        event_lines = rec.readlines()
+    real_rec = os.path.realpath(recording_file)
+    if real_rec.endswith('.gz'):
+        with gzip.open(real_rec, 'rt', encoding='utf-8') as rec:
+            event_lines = rec.readlines()
+    else:
+        with open(recording_file) as rec:
+            event_lines = rec.readlines()
 
     for event_line in event_lines:
         if not event_line:
