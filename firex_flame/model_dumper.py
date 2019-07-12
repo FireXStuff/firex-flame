@@ -46,7 +46,8 @@ def load_full_task(log_dir, task_uuid):
 def index_tasks_by_names(tasks, names):
     tasks_by_name = {n: [] for n in names}
     for t in tasks:
-        tasks_by_name[t['name']].append(t)
+        if t['name'] in names:
+            tasks_by_name[t['name']].append(t)
     return tasks_by_name
 
 
