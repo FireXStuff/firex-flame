@@ -3,7 +3,8 @@ import os
 import gzip
 import json
 
-from firex_flame.model_dumper import FlameModelDumper
+from firex_flame.model_dumper import FlameModelDumper, get_flame_model_dir, get_model_full_tasks_by_names, \
+    index_tasks_by_names
 from firex_flame.event_aggregator import FlameEventAggregator
 from firex_flame.flame_helper import get_rec_file
 
@@ -53,3 +54,15 @@ def get_tasks_from_rec_file(log_dir=None, rec_filepath=None):
     process_recording_file(aggregator, rec_file)
 
     return aggregator.tasks_by_uuid, aggregator.root_uuid
+
+
+def get_model_or_rec_full_tasks_by_names(logs_dir, task_names):
+    if os.path.isdir(get_flame_model_dir(logs_dir)):
+        return get_model_full_tasks_by_names(logs_dir, task_names)
+
+    rec_file = os.path.join(logs_dir, 'flame.rec')
+    if os.path.isfile(rec_file):
+        tasks_by_uuid, _ = get_tasks_from_rec_file(rec_filepath=rec_file)
+        return index_tasks_by_names(tasks_by_uuid.values(), task_names)
+
+    raise Exception("Found neither model directory or rec_file, no source of task data in: %s" % logs_dir)

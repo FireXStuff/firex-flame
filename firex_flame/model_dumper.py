@@ -43,15 +43,18 @@ def load_full_task(log_dir, task_uuid):
     return json.loads(Path(get_all_tasks_dir(firex_logs_dir=log_dir), task_uuid + '.json').read_text())
 
 
-def get_full_tasks_by_names(log_dir, task_names):
+def index_tasks_by_names(tasks, names):
+    tasks_by_name = {n: [] for n in names}
+    for t in tasks:
+        tasks_by_name[t['name']].append(t)
+    return tasks_by_name
+
+
+def get_model_full_tasks_by_names(log_dir, task_names):
     if isinstance(task_names, str):
         task_names = [task_names]
     tasks_by_uuid = get_full_tasks_by_slim_pred(log_dir, lambda st: st.get('name', None) in task_names)
-
-    tasks_by_name = {n: [] for n in task_names}
-    for t in tasks_by_uuid.values():
-        tasks_by_name[t['name']].append(t)
-    return tasks_by_name
+    return index_tasks_by_names(tasks_by_uuid.values(), task_names)
 
 
 def get_full_tasks_by_slim_pred(log_dir, slim_predicate):
