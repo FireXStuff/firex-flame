@@ -92,7 +92,7 @@ class BrokerEventConsumerThread(threading.Thread):
             # pylint: disable=C0321
             except Exception:
                 if self.event_aggregator.is_root_complete():
-                    logger.info("Stopping broker receiver (not entire server) due to complete root task.")
+                    logger.info("Root task complete; stopping broker receiver (not entire server).")
                     return
                 logger.error(traceback.format_exc())
                 if try_interval > self.max_try_interval:

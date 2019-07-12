@@ -45,4 +45,3 @@ def run_flame(broker_consumer_config, web_port, run_metadata, recording_file):
         eventlet.wsgi.server(eventlet.listen(('', web_port)), sio_web_app)
     except KeyboardInterrupt:
         logger.info('KeyboardInterrupt - Shutting down')
-        sys.exit(0)

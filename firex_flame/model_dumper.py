@@ -78,6 +78,7 @@ class FlameModelDumper:
         return metadata_model_file
 
     def dump_complete_data_model(self, event_aggregator, run_metadata=None):
+        logger.info("Starting to dump complete Flame model.")
         full_tasks_dir = get_all_tasks_dir(root_model_dir=self.root_model_dir)
         os.makedirs(full_tasks_dir)
 
@@ -92,7 +93,7 @@ class FlameModelDumper:
         paths_to_compress = [slim_tasks_file, full_tasks_dir]
         if run_metadata:
             # Write metadata file.
-            # Note that since a flame can terminate (e.g. via timeout) before a run, there is no gauarantee
+            # Note that since a flame can terminate (e.g. via timeout) before a run, there is no guarantee
             # that the run_metadata model file will ever have run_complete: true.
             run_complete = event_aggregator.tasks_by_uuid.get(event_aggregator.root_uuid,
                                                               {'state': None})['state'] in COMPLETE_STATES
@@ -103,3 +104,5 @@ class FlameModelDumper:
         with tarfile.open(os.path.join(self.root_model_dir, 'full-run-state.tar.gz'), "w:gz") as tar:
             for path in paths_to_compress:
                 tar.add(path, arcname=os.path.basename(path))
+
+        logger.info("Finished dumping complete Flame model.")

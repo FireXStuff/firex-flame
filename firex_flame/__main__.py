@@ -50,11 +50,11 @@ def _parse_args():
 
 
 def _sigterm_handler(_, __):
-    stop_main_thread('SIGTERM detected, shutting down')
+    stop_main_thread('SIGTERM detected')
 
 
 def _sigint_handler(_, __):
-    stop_main_thread('SIGINT detected, shutting down')
+    stop_main_thread('SIGINT detected')
 
 
 def _exit_on_timeout():
