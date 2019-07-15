@@ -8,15 +8,18 @@ import time
 import requests
 import urllib.parse
 
+
 from bs4 import BeautifulSoup
 import socketio
 from firexapp.testing.config_base import FlowTestConfiguration, assert_is_good_run
 from firexapp.submit.submit import get_log_dir_from_output
+from firexapp.engine.celery import app
+from firexkit.chain import returns
 
 from firex_flame.event_file_processor import get_tasks_from_rec_file
-from firex_flame.flame_helper import get_flame_pid, wait_until_pid_not_exist, wait_until, get_rec_file
+from firex_flame.flame_helper import get_flame_pid, wait_until_pid_not_exist, wait_until, get_rec_file, filter_paths
 from firex_flame.event_aggregator import INCOMPLETE_STATES, COMPLETE_STATES
-from firex_flame.model_dumper import get_tasks_slim_file
+from firex_flame.model_dumper import get_tasks_slim_file, get_model_full_tasks_by_names
 
 
 def flame_url_from_output(cmd_output):
@@ -352,3 +355,34 @@ class FlameTerminateOnCompleteTest(FlameFlowTestConfiguration):
         # the broker processor to shutdown flame gracefully.
         flame_killed = wait_until_pid_not_exist(get_flame_pid(log_dir), timeout=30)
         assert flame_killed, 'Flame not terminated after root revoked, even though terminate_on_complete was supplied.'
+
+
+# noinspection PyUnusedLocal
+@app.task
+@returns('sum')
+def add(op1, op2):
+    return int(op1) + int(op2)
+
+
+class DumpDataOnCompleteTest(FlameFlowTestConfiguration):
+    """ Tests task data model dumping performed at end of broker receiver. """
+
+    def initial_firex_options(self) -> list:
+        return ["submit", "--chain", 'add', '--op1', '1', '--op2', '2']
+
+    def assert_on_flame_url(self, log_dir, flame_url):
+        tasks_by_name = get_model_full_tasks_by_names(log_dir, ['add'])
+        assert len(tasks_by_name) == 1
+        assert len(tasks_by_name['add']) == 1
+
+        query = {
+            ('state',): 'task-succeeded',
+            # TODO: add additional criteria when these fields are ported from firex legacy.
+            # ('firex_bound_args', 'op1'): '1',
+            # ('firex_bound_args', 'op2'): '2',
+            # ('firex_result', 'sum'): 3,
+        }
+
+        found_paths = filter_paths(tasks_by_name, query)['add']
+        print(found_paths)
+        assert len(found_paths) == 1

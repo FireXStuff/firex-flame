@@ -78,3 +78,24 @@ def get_rec_file(log_dir):
 
 def get_flame_url(port, hostname=gethostname()):
     return 'http://%s:%d' % (hostname, int(port))
+
+
+def find(keys, input_dict):
+    result = input_dict
+    for key in keys:
+        try:
+            result = result[key]
+        except KeyError:
+            return None
+    return result
+
+
+def filter_paths(input_dict, paths_to_values):
+    results = {}
+    for in_key, in_vals in input_dict.items():
+        results[in_key] = []
+        for in_val in in_vals:
+            matches_all = all(to_equal == find(p, in_val) for p, to_equal in paths_to_values.items())
+            if matches_all:
+                results[in_key].append(in_val)
+    return results
