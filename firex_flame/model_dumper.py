@@ -81,17 +81,25 @@ class FlameModelDumper:
         _write_json(metadata_model_file, {**complete, **run_metadata})
         return metadata_model_file
 
-    def dump_complete_data_model(self, event_aggregator, run_metadata=None):
+    def dump_aggregator_complete_data_model(self, event_aggregator, run_metadata=None):
+        self.dump_complete_data_model(event_aggregator.tasks_by_uuid, event_aggregator.root_uuid, run_metadata)
+
+    def dump_complete_data_model(self, tasks_by_uuid, root_uuid=None, run_metadata=None):
         logger.info("Starting to dump complete Flame model.")
+
+        if not root_uuid:
+            root_uuid = min([t for t in tasks_by_uuid.values() if t.get('parent_id', '') is None],
+                            lambda t: t['task_num'])
+
         full_tasks_dir = get_all_tasks_dir(root_model_dir=self.root_model_dir)
         os.makedirs(full_tasks_dir)
 
         # Write JSON file with minimum amount of info to render graph.
         slim_tasks_file = get_tasks_slim_file(root_model_dir=self.root_model_dir)
-        _write_json(slim_tasks_file, slim_tasks_by_uuid(event_aggregator.tasks_by_uuid))
+        _write_json(slim_tasks_file, slim_tasks_by_uuid(tasks_by_uuid))
 
         # Write one JSON file per task.
-        for uuid, task in event_aggregator.tasks_by_uuid.items():
+        for uuid, task in tasks_by_uuid.items():
             _write_json(os.path.join(full_tasks_dir, '%s.json' % uuid), task)
 
         paths_to_compress = [slim_tasks_file, full_tasks_dir]
@@ -99,8 +107,7 @@ class FlameModelDumper:
             # Write metadata file.
             # Note that since a flame can terminate (e.g. via timeout) before a run, there is no guarantee
             # that the run_metadata model file will ever have run_complete: true.
-            run_complete = event_aggregator.tasks_by_uuid.get(event_aggregator.root_uuid,
-                                                              {'state': None})['state'] in COMPLETE_STATES
+            run_complete = tasks_by_uuid.get(root_uuid, {'state': None})['state'] in COMPLETE_STATES
             metadata_model_file = self.dump_metadata(run_metadata, run_complete, flame_complete=True)
             paths_to_compress.append(metadata_model_file)
 

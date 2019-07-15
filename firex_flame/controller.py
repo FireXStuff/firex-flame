@@ -25,4 +25,4 @@ class FlameAppController:
         self.model_dumper.dump_metadata(self.run_metadata, run_complete=False, flame_complete=False)
 
     def dump_complete_data_model(self, event_aggregator):
-        self.model_dumper.dump_complete_data_model(event_aggregator, self.run_metadata)
+        self.model_dumper.dump_aggregator_complete_data_model(event_aggregator, self.run_metadata)

@@ -40,7 +40,7 @@ def dumper_main():
 
     aggregator = FlameEventAggregator()
     process_recording_file(aggregator, args.rec)
-    FlameModelDumper(root_model_dir=args.dest_dir).dump_complete_data_model(aggregator)
+    FlameModelDumper(root_model_dir=args.dest_dir).dump_aggregator_complete_data_model(aggregator)
 
 
 def get_tasks_from_rec_file(log_dir=None, rec_filepath=None):

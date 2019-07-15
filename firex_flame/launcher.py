@@ -71,8 +71,7 @@ class FlameLauncher(TrackingService):
                                 default=None)
         arg_parser.add_argument('--flame_terminate_on_complete',
                                 help='Terminate Flame when run completes. Ignores timeout arg entirely.',
-                                type=bool,
-                                default=False)
+                                default=None, const=True, nargs='?')
         arg_parser.add_argument('--flame_require_up_after_wait',
                                 help='Fail the launcher if the Flame webserver & Celery receiver are not up after the '
                                      'specified wait time. Set the wait time with --flame_startup_wait.',

@@ -11,6 +11,7 @@ import time
 
 from celery.events import EventReceiver
 
+from firex_flame.controller import FlameAppController
 from firex_flame.flame_helper import stop_main_thread
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ class BrokerConsumerConfig:
 class BrokerEventConsumerThread(threading.Thread):
     """Events threading class
     """
-    def __init__(self, celery_app, flame_controller, event_aggregator, config, recording_file):
+    def __init__(self, celery_app, flame_controller: FlameAppController, event_aggregator, config, recording_file):
         threading.Thread.__init__(self)
         self.celery_app = celery_app
         self.recording_file = recording_file
