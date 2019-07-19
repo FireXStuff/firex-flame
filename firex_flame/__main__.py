@@ -19,7 +19,7 @@ def _parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', help='Port for starting the web server on', type=int, default=8000)
     parser.add_argument('--uid', help='Unique identifier for the represented FireX run.')
-    parser.add_argument('--logs_dir', help='Logs directory.', default=None)
+    parser.add_argument('--logs_dir', help='Logs directory.', default=None, required=True)
     parser.add_argument('--chain', help='Chain of the run.', default=None)
     parser.add_argument('--recording', help='A file containing the recording of celery events.', default=None)
     parser.add_argument('--central_server', help='A central web server from which the UI and logs can be served.',

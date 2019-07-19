@@ -5,6 +5,7 @@ from pathlib import Path
 import tarfile
 
 from firex_flame.event_aggregator import slim_tasks_by_uuid, COMPLETE_STATES
+from firex_flame.flame_helper import json_file_predicate
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,10 @@ def _get_base_model_dir(firex_logs_dir=None, root_model_dir=None):
 
 def get_all_tasks_dir(firex_logs_dir=None, root_model_dir=None):
     return os.path.join(_get_base_model_dir(firex_logs_dir, root_model_dir), 'full-tasks')
+
+
+def get_run_metadata_file(firex_logs_dir=None, root_model_dir=None):
+    return os.path.join(_get_base_model_dir(firex_logs_dir, root_model_dir), 'run-metadata.json')
 
 
 def get_tasks_slim_file(firex_logs_dir=None, root_model_dir=None):
@@ -64,6 +69,12 @@ def get_full_tasks_by_slim_pred(log_dir, slim_predicate):
             if slim_predicate(slim_task)}
 
 
+def is_dump_complete(firex_logs_dir):
+    def is_model_complete(run_metadata):
+        return run_metadata['flame_recv_complete']
+    return json_file_predicate(get_run_metadata_file(firex_logs_dir=firex_logs_dir), is_model_complete)
+
+
 class FlameModelDumper:
 
     def __init__(self, firex_logs_dir=None, root_model_dir=None):
@@ -76,7 +87,7 @@ class FlameModelDumper:
         os.makedirs(self.root_model_dir, exist_ok=True)
 
     def dump_metadata(self, run_metadata, run_complete, flame_complete):
-        metadata_model_file = os.path.join(self.root_model_dir, 'run-metadata.json')
+        metadata_model_file = get_run_metadata_file(root_model_dir=self.root_model_dir)
         complete = {'run_complete': run_complete, 'flame_recv_complete': flame_complete}
         _write_json(metadata_model_file, {**complete, **run_metadata})
         return metadata_model_file

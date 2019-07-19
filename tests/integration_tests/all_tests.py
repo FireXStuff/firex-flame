@@ -19,7 +19,7 @@ from firexkit.chain import returns
 from firex_flame.event_file_processor import get_tasks_from_rec_file
 from firex_flame.flame_helper import get_flame_pid, wait_until_pid_not_exist, wait_until, get_rec_file, filter_paths
 from firex_flame.event_aggregator import INCOMPLETE_STATES, COMPLETE_STATES
-from firex_flame.model_dumper import get_tasks_slim_file, get_model_full_tasks_by_names
+from firex_flame.model_dumper import get_tasks_slim_file, get_model_full_tasks_by_names, is_dump_complete
 
 
 def flame_url_from_output(cmd_output):
@@ -371,6 +371,8 @@ class DumpDataOnCompleteTest(FlameFlowTestConfiguration):
         return ["submit", "--chain", 'add', '--op1', '1', '--op2', '2']
 
     def assert_on_flame_url(self, log_dir, flame_url):
+        assert is_dump_complete(log_dir), "Model dump not complete, can't assert on task data."
+
         tasks_by_name = get_model_full_tasks_by_names(log_dir, ['add'])
         assert len(tasks_by_name) == 1
         assert len(tasks_by_name['add']) == 1

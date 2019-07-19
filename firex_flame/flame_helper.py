@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from pathlib import Path
@@ -51,6 +52,17 @@ def wait_until_web_request_ok(url, timeout=10, sleep_for=1):
 
 def wait_until_path_exist(path, timeout=7, sleep_for=1):
     return wait_until(os.path.exists, timeout, sleep_for, path)
+
+
+def json_file_predicate(json_file_path, pred):
+    if not os.path.isfile(json_file_path):
+        return False
+    try:
+        file_data = json.loads(Path(json_file_path).read_text())
+    except (json.decoder.JSONDecodeError, OSError):
+        return False
+    else:
+        return pred(file_data)
 
 
 def _interrupt_main_thread():
