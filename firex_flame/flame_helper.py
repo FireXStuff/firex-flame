@@ -6,6 +6,7 @@ import psutil
 import time
 import threading
 from socket import gethostname
+import signal
 import sys
 
 import requests
@@ -111,3 +112,16 @@ def filter_paths(input_dict, paths_to_values):
             if matches_all:
                 results[in_key].append(in_val)
     return results
+
+
+def kill_flame(log_dir, sig=signal.SIGKILL, timeout=10):
+    flame_pid = get_flame_pid(log_dir)
+    kill_and_wait(flame_pid, sig, timeout)
+    return flame_pid
+
+
+def kill_and_wait(pid, sig=signal.SIGKILL, timeout=10):
+    if psutil.pid_exists(pid):
+        os.kill(pid, sig)
+        wait_until_pid_not_exist(pid, timeout=timeout)
+    return not psutil.pid_exists(pid)

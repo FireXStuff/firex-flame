@@ -17,7 +17,8 @@ from firexapp.engine.celery import app
 from firexkit.chain import returns
 
 from firex_flame.event_file_processor import get_tasks_from_rec_file
-from firex_flame.flame_helper import get_flame_pid, wait_until_pid_not_exist, wait_until, get_rec_file, filter_paths
+from firex_flame.flame_helper import get_flame_pid, wait_until_pid_not_exist, wait_until, get_rec_file, filter_paths, \
+    kill_flame, kill_and_wait
 from firex_flame.event_aggregator import INCOMPLETE_STATES, COMPLETE_STATES
 from firex_flame.model_dumper import get_tasks_slim_file, get_model_full_tasks_by_names, is_dump_complete
 
@@ -27,19 +28,6 @@ def flame_url_from_output(cmd_output):
     if m:
         return m.group(1)
     return None
-
-
-def kill_flame(log_dir, sig=signal.SIGKILL):
-    flame_pid = get_flame_pid(log_dir)
-    kill_and_wait(flame_pid, sig)
-    return flame_pid
-
-
-def kill_and_wait(pid, sig=signal.SIGKILL):
-    if psutil.pid_exists(pid):
-        os.kill(pid, sig)
-        wait_until_pid_not_exist(pid, timeout=10)
-    return not psutil.pid_exists(pid)
 
 
 class FlameFlowTestConfiguration(FlowTestConfiguration):

@@ -58,7 +58,10 @@ class BrokerEventConsumerThread(threading.Thread):
         incomplete_task_events = self.event_aggregator.generate_incomplete_events()
         if incomplete_task_events:
             logger.warning("Forcing runstates of %d incomplete tasks to be terminal." % len(incomplete_task_events))
-        self._aggregate_and_send(incomplete_task_events)
+            self._aggregate_and_send(incomplete_task_events)
+        else:
+            logger.debug("All tasks already terminal following terminal root.")
+
 
     def run(self):
         self._run_from_broker()
