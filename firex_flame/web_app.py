@@ -92,6 +92,7 @@ def ok_json_response(response_data):
 
 def create_ui_config(run_metadata):
     return {
+        # Tells UI to fetch task data from the origin via Flame's socketio API.
         "access_mode": 'socketio-origin',
         "model_path_template": None,
         "redirect_to_alive_flame": False,

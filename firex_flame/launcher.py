@@ -60,6 +60,9 @@ class FlameLauncher(TrackingService):
         arg_parser.add_argument('--flame_central_server_ui_path',
                                 help='Path relative to flame_central_server from which the Flame UI is served.',
                                 default=None)
+        arg_parser.add_argument('--flame_central_documentation_url',
+                                help='URL linking to main out-of-app docs.',
+                                default=None)
         arg_parser.add_argument('--broker_max_retry_attempts',
                                 help='See Flame argument help.',
                                 default=None)
@@ -102,6 +105,7 @@ class FlameLauncher(TrackingService):
             'recording': rec_file,
             'central_server': args.flame_central_server,
             'central_server_ui_path': args.flame_central_server_ui_path,
+            'central_documentation_url': args.flame_central_documentation_url,
             'flame_timeout': args.flame_timeout,
             'broker_recv_ready_file': broker_recv_ready_file,
             'broker_max_retry_attempts': args.broker_max_retry_attempts,

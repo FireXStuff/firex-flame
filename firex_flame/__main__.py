@@ -27,6 +27,8 @@ def _parse_args():
     parser.add_argument('--central_server_ui_path', help='Path part of the URL from which the central server serves'
                                                          'the UI. Only has meaning when a central_server is supplied.',
                         default=None)
+    parser.add_argument('--central_documentation_url', help='URL linking to main out-of-app docs.',
+                        default='http://www.firexapp.com/')
     # TODO: could validate either rec file exists or broker is supplied.
     parser.add_argument('--broker', help='Celery broker.', default=None)
     parser.add_argument('--flame_timeout', help='Maximum lifetime of this service, in seconds', type=int,
@@ -83,8 +85,7 @@ def _create_run_metadata(cli_args):
         'central_server': cli_args.central_server,
         'central_server_ui_path': cli_args.central_server_ui_path,
         'chain': cli_args.chain,
-        # TODO: externalize.
-        'central_documentation_url': 'http://www.firexapp.com/',
+        'central_documentation_url': cli_args.central_documentation_url,
         'flame_url': get_flame_url(cli_args.port),
     }
 
