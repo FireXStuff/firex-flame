@@ -6,6 +6,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+TASK_ARGS = 'firex_bound_args'
+
 #
 # config field options:
 #   copy_celery - True if this field should be copied from the celery event to the task data model. If the field already
@@ -41,7 +43,7 @@ FIELD_CONFIG = {
         } if e['type'] in STATE_TYPES else {},
     },
     'retries': {'copy_celery': True, 'slim_field': True},
-    'firex_bound_args': {'copy_celery': True},
+    TASK_ARGS: {'copy_celery': True},
     'flame_additional_data': {'copy_celery': True, 'slim_field': True},
     'actual_runtime': {'copy_celery': True, 'slim_field': True},
     'support_location': {'copy_celery': True},

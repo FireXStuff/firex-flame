@@ -66,3 +66,20 @@ def get_model_or_rec_full_tasks_by_names(logs_dir, task_names):
         return index_tasks_by_names(tasks_by_uuid.values(), task_names)
 
     raise Exception("Found neither model directory or rec_file, no source of task data in: %s" % logs_dir)
+
+
+def get_model_or_rec_full_tasks_by_uuids(logs_dir, uuids):
+    if os.path.isdir(get_flame_model_dir(logs_dir)):
+        return get_full_tasks_by_slim_pred(logs_dir, lambda st: st['uuid'] in uuids)
+
+    rec_file = os.path.join(logs_dir, 'flame.rec')
+    if os.path.isfile(rec_file):
+        tasks_by_uuid, _ = get_tasks_from_rec_file(rec_filepath=rec_file)
+        return {u: t for u, t in tasks_by_uuid.items() if u in uuids}
+
+    raise Exception("Found neither model directory or rec_file, no source of task data in: %s" % logs_dir)
+
+
+def get_model_or_rec_full_task(logs_dir, uuid):
+    task_by_uuid = get_model_or_rec_full_tasks_by_uuids(logs_dir, [uuid])
+    return task_by_uuid[uuid]
