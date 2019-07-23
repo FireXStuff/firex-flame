@@ -63,6 +63,9 @@ class FlameLauncher(TrackingService):
         arg_parser.add_argument('--flame_central_documentation_url',
                                 help='URL linking to main out-of-app docs.',
                                 default=None)
+        arg_parser.add_argument('--firex_bin_path',
+                                help='Path to firex executable.',
+                                default=None)
         arg_parser.add_argument('--broker_max_retry_attempts',
                                 help='See Flame argument help.',
                                 default=None)
@@ -110,6 +113,7 @@ class FlameLauncher(TrackingService):
             'broker_recv_ready_file': broker_recv_ready_file,
             'broker_max_retry_attempts': args.broker_max_retry_attempts,
             'terminate_on_complete': args.flame_terminate_on_complete,
+            'firex_bin_path': args.firex_bin_path,
         }
 
         non_empty_args_strs = ['--%s "%s"' % (k, v) for k, v in cmd_args.items() if v]

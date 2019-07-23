@@ -29,6 +29,8 @@ def _parse_args():
                         default=None)
     parser.add_argument('--central_documentation_url', help='URL linking to main out-of-app docs.',
                         default='http://www.firexapp.com/')
+    parser.add_argument('--firex_bin_path', help='Path to a firex executable.',
+                        default=None)
     # TODO: could validate either rec file exists or broker is supplied.
     parser.add_argument('--broker', help='Celery broker.', default=None)
     parser.add_argument('--flame_timeout', help='Maximum lifetime of this service, in seconds', type=int,
@@ -87,6 +89,7 @@ def _create_run_metadata(cli_args):
         'chain': cli_args.chain,
         'central_documentation_url': cli_args.central_documentation_url,
         'flame_url': get_flame_url(cli_args.port),
+        'firex_bin': cli_args.firex_bin_path,
     }
 
 
