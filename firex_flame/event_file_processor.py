@@ -4,7 +4,7 @@ import gzip
 import json
 
 from firex_flame.model_dumper import FlameModelDumper, get_flame_model_dir, get_model_full_tasks_by_names, \
-    index_tasks_by_names
+    index_tasks_by_names, get_full_tasks_by_slim_pred
 from firex_flame.event_aggregator import FlameEventAggregator
 from firex_flame.flame_helper import get_rec_file
 
