@@ -5,11 +5,11 @@ import json
 
 from firex_flame.model_dumper import FlameModelDumper, get_flame_model_dir, get_model_full_tasks_by_names, \
     index_tasks_by_names, get_full_tasks_by_slim_pred
-from firex_flame.event_aggregator import FlameEventAggregator
-from firex_flame.flame_helper import get_rec_file
+from firex_flame.event_aggregator import FlameEventAggregator, TASK_ARGS
+from firex_flame.flame_helper import get_rec_file, find
 
 
-def process_recording_file(event_aggregator, recording_file):
+def process_recording_file(event_aggregator: FlameEventAggregator, recording_file: str, run_metadata: dict):
     assert os.path.isfile(recording_file), "Recording file doesn't exist: %s" % recording_file
 
     real_rec = os.path.realpath(recording_file)
@@ -30,6 +30,11 @@ def process_recording_file(event_aggregator, recording_file):
         # Kludge incomplete runstates that will never become terminal.
         event_aggregator.aggregate_events(event_aggregator.generate_incomplete_events())
 
+    if run_metadata.get('uid', None) is None:
+        root_task = event_aggregator.tasks_by_uuid[event_aggregator.root_uuid]
+        run_metadata['uid'] = find([TASK_ARGS, 'chain_args', 'uid'], root_task)
+        run_metadata['chain'] = find([TASK_ARGS, 'chain'], root_task)
+
 
 def dumper_main():
     parser = argparse.ArgumentParser()
@@ -39,7 +44,7 @@ def dumper_main():
     args = parser.parse_args()
 
     aggregator = FlameEventAggregator()
-    process_recording_file(aggregator, args.rec)
+    process_recording_file(aggregator, args.rec, {})
     FlameModelDumper(root_model_dir=args.dest_dir).dump_aggregator_complete_data_model(aggregator)
 
 
@@ -51,7 +56,7 @@ def get_tasks_from_rec_file(log_dir=None, rec_filepath=None):
         rec_file = rec_filepath
     assert os.path.exists(rec_file), "Recording file not found: %s" % rec_file
     aggregator = FlameEventAggregator()
-    process_recording_file(aggregator, rec_file)
+    process_recording_file(aggregator, rec_file, {})
 
     return aggregator.tasks_by_uuid, aggregator.root_uuid
 

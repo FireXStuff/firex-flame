@@ -24,7 +24,7 @@ def run_flame(broker_consumer_config, web_port, run_metadata, recording_file):
 
     event_aggregator = FlameEventAggregator()
     if recording_file and os.path.isfile(recording_file):
-        event_recv_thread = Thread(target=process_recording_file, args=(event_aggregator, recording_file))
+        event_recv_thread = Thread(target=process_recording_file, args=(event_aggregator, recording_file, run_metadata))
     else:
         assert broker_consumer_config.broker_url, "Since recording file doesn't exist, the broker is required."
         celery_app = celery.Celery(broker=broker_consumer_config.broker_url)
