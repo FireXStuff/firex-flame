@@ -30,7 +30,7 @@ def process_recording_file(event_aggregator: FlameEventAggregator, recording_fil
         # Kludge incomplete runstates that will never become terminal.
         event_aggregator.aggregate_events(event_aggregator.generate_incomplete_events())
 
-    if run_metadata.get('uid', None) is None:
+    if run_metadata.get('uid', None) is None and event_aggregator.root_uuid is not None:
         root_task = event_aggregator.tasks_by_uuid[event_aggregator.root_uuid]
         run_metadata['uid'] = find([TASK_ARGS, 'chain_args', 'uid'], root_task)
         run_metadata['chain'] = find([TASK_ARGS, 'chain'], root_task)
