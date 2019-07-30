@@ -16,7 +16,7 @@ setup(name='firex_flame',
             "Flask-AutoIndex",
             "python-socketio==4.1.0",
             'firexapp',
-            "eventlet>=0.21.0",
+            "eventlet==0.21.0",
             # Middle UI version number indicates expected server API version.
             # e.g 0.20.x means this server adheres to contract version 0.20 between UI and server.
             "firex_flame_ui<0.22",
