@@ -24,7 +24,7 @@ def wait_webserver_and_celery_recv_ready(flame_url, broker_recv_ready_file, wait
 
     # Wait for web server via HTTP GET.
     webserver_alive = wait_until_web_request_ok(urllib.parse.urljoin(flame_url, '/alive'),
-                                                timeout=wait_time, sleep_for=1)
+                                                timeout=wait_time, sleep_for=0.5)
     if not webserver_alive:
         if fail_if_not_up:
             raise Exception("Flame web server at %s not up after %s seconds." % (flame_url, wait_time))
