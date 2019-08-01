@@ -98,9 +98,10 @@ class FlameModelDumper:
     def dump_complete_data_model(self, tasks_by_uuid, root_uuid=None, run_metadata=None):
         logger.info("Starting to dump complete Flame model.")
 
-        if not root_uuid:
+        if not root_uuid and tasks_by_uuid:
+            # If the root UUID wasn't already found, but there are tasks, try to find the root.
             root_uuid = min([t for t in tasks_by_uuid.values() if t.get('parent_id', '') is None],
-                            lambda t: t['task_num'])
+                            key=lambda t: t['task_num'])
 
         full_tasks_dir = get_all_tasks_dir(root_model_dir=self.root_model_dir)
         os.makedirs(full_tasks_dir)
