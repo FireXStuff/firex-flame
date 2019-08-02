@@ -6,12 +6,13 @@ from firex_flame.event_file_processor import process_recording_file, get_model_o
 
 test_data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 
+
 class EventFileProcessorTests(unittest.TestCase):
 
     def test_process_rec_file(self):
         event_aggregator = FlameEventAggregator()
 
-        recording_file = os.path.join(test_data_dir, 'nop', 'flame.rec')
+        recording_file = os.path.join(test_data_dir, 'nop', 'debug', 'flame', 'flame.rec')
 
         run_metadata = {}
         process_recording_file(event_aggregator, recording_file, run_metadata)
