@@ -11,7 +11,7 @@ from firexapp.submit.console import setup_console_logging
 from firexapp.submit.uid import Uid
 
 from firex_flame.flame_helper import DEFAULT_FLAME_TIMEOUT, wait_until_web_request_ok, get_flame_debug_dir, \
-    wait_until_path_exist, get_rec_file, get_flame_url
+    wait_until_path_exist, get_rec_file, get_flame_url, get_old_rec_file
 
 FLAME_LOG_REGISTRY_KEY = 'FLAME_OUTPUT_LOG_REGISTRY_KEY2'
 FileRegistry().register_file(FLAME_LOG_REGISTRY_KEY, os.path.join(Uid.debug_dirname, 'flame.stdout'))
@@ -46,6 +46,34 @@ def wait_webserver_and_celery_recv_ready(flame_url, broker_recv_ready_file, wait
         end_wait = time.perf_counter()
         logger.debug("Web server & Celery receiver are now ready after waiting %.1f seconds."
                      % (end_wait - start_wait))
+
+
+def get_flame_args(port, uid, broker_recv_ready_file, args):
+    if args.flame_record:
+        rec_file = args.flame_record
+    else:
+        rec_file = get_rec_file(uid.logs_dir)
+        os.symlink(rec_file, get_old_rec_file(uid.logs_dir))
+
+    # assemble startup cmd
+    cmd_args = {
+        'port': port,
+        'broker': BrokerFactory.get_broker_url(),
+        'uid': str(uid),
+        'logs_dir': uid.logs_dir,
+        'chain': args.chain,
+        'recording': rec_file,
+        'central_server': args.flame_central_server,
+        'central_server_ui_path': args.flame_central_server_ui_path,
+        'central_documentation_url': args.flame_central_documentation_url,
+        'flame_timeout': args.flame_timeout,
+        'broker_recv_ready_file': broker_recv_ready_file,
+        'broker_max_retry_attempts': args.broker_max_retry_attempts,
+        'terminate_on_complete': args.flame_terminate_on_complete,
+        'firex_bin_path': args.firex_bin_path,
+    }
+
+    return ['--%s "%s"' % (k, v) for k, v in cmd_args.items() if v]
 
 
 class FlameLauncher(TrackingService):
@@ -92,32 +120,10 @@ class FlameLauncher(TrackingService):
 
     def start(self, args, uid=None, **kwargs)->{}:
         port = int(args.flame_port) if args.flame_port else get_available_port()
-        if args.flame_record:
-            rec_file = args.flame_record
-        else:
-            rec_file = get_rec_file(uid.logs_dir)
         broker_recv_ready_file = os.path.join(get_flame_debug_dir(uid.logs_dir), 'celery_receiver_ready')
 
-        # assemble startup cmd
-        cmd_args = {
-            'port': port,
-            'broker': BrokerFactory.get_broker_url(),
-            'uid': str(uid),
-            'logs_dir': uid.logs_dir,
-            'chain': args.chain,
-            'recording': rec_file,
-            'central_server': args.flame_central_server,
-            'central_server_ui_path': args.flame_central_server_ui_path,
-            'central_documentation_url': args.flame_central_documentation_url,
-            'flame_timeout': args.flame_timeout,
-            'broker_recv_ready_file': broker_recv_ready_file,
-            'broker_max_retry_attempts': args.broker_max_retry_attempts,
-            'terminate_on_complete': args.flame_terminate_on_complete,
-            'firex_bin_path': args.firex_bin_path,
-        }
-
-        non_empty_args_strs = ['--%s "%s"' % (k, v) for k, v in cmd_args.items() if v]
-        cmd = 'firex_flame %s &' % ' '.join(non_empty_args_strs)
+        flame_args = get_flame_args(port, uid, broker_recv_ready_file, args)
+        cmd = 'firex_flame %s &' % ' '.join(flame_args)
 
         # start the flame service and return the port
         flame_stdout = FileRegistry().get_file(FLAME_LOG_REGISTRY_KEY, uid.logs_dir)

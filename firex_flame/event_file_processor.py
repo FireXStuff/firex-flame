@@ -65,7 +65,7 @@ def get_model_or_rec_full_tasks_by_names(logs_dir, task_names):
     if os.path.isdir(get_flame_model_dir(logs_dir)):
         return get_model_full_tasks_by_names(logs_dir, task_names)
 
-    rec_file = os.path.join(logs_dir, 'flame.rec')
+    rec_file = get_rec_file(logs_dir)
     if os.path.isfile(rec_file):
         tasks_by_uuid, _ = get_tasks_from_rec_file(rec_filepath=rec_file)
         return index_tasks_by_names(tasks_by_uuid.values(), task_names)
@@ -77,7 +77,7 @@ def get_model_or_rec_full_tasks_by_uuids(logs_dir, uuids):
     if os.path.isdir(get_flame_model_dir(logs_dir)):
         return get_full_tasks_by_slim_pred(logs_dir, lambda st: st['uuid'] in uuids)
 
-    rec_file = os.path.join(logs_dir, 'flame.rec')
+    rec_file = get_rec_file(logs_dir)
     if os.path.isfile(rec_file):
         tasks_by_uuid, _ = get_tasks_from_rec_file(rec_filepath=rec_file)
         return {u: t for u, t in tasks_by_uuid.items() if u in uuids}

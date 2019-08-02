@@ -62,7 +62,6 @@ class BrokerEventConsumerThread(threading.Thread):
         else:
             logger.debug("All tasks already terminal following terminal root.")
 
-
     def run(self):
         self._run_from_broker()
 

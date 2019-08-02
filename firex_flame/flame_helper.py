@@ -17,7 +17,7 @@ DEFAULT_FLAME_TIMEOUT = 60 * 60 * 24 * 2
 
 
 def get_flame_debug_dir(root_logs_dir):
-    return os.path.join(root_logs_dir, 'debug', 'flame_server')
+    return os.path.join(root_logs_dir, 'debug', 'flame')
 
 
 def get_flame_pid_file_path(root_logs_dir):
@@ -86,6 +86,10 @@ def stop_main_thread(reason):
 
 
 def get_rec_file(log_dir):
+    return os.path.join(get_flame_debug_dir(log_dir), 'flame.rec')
+
+
+def get_old_rec_file(log_dir):
     return os.path.join(log_dir, 'flame.rec')
 
 

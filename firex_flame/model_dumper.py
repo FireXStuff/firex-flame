@@ -5,7 +5,7 @@ from pathlib import Path
 import tarfile
 
 from firex_flame.event_aggregator import slim_tasks_by_uuid, COMPLETE_STATES
-from firex_flame.flame_helper import json_file_predicate
+from firex_flame.flame_helper import json_file_predicate, get_flame_debug_dir
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +16,10 @@ def _write_json(file, data):
 
 
 def get_flame_model_dir(firex_logs_dir):
+    return os.path.join(get_flame_debug_dir(firex_logs_dir), 'model')
+
+
+def get_flame_old_model_dir(firex_logs_dir):
     return os.path.join(firex_logs_dir, 'flame_model')
 
 
@@ -82,6 +86,7 @@ class FlameModelDumper:
             "Dumper needs exclusively either logs dir or root model dir."
         if firex_logs_dir:
             self.root_model_dir = get_flame_model_dir(firex_logs_dir)
+            os.symlink(self.root_model_dir, get_flame_old_model_dir(firex_logs_dir), target_is_directory=True)
         else:
             self.root_model_dir = root_model_dir
         os.makedirs(self.root_model_dir, exist_ok=True)

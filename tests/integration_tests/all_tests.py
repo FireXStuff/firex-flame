@@ -209,8 +209,8 @@ def get_tasks_by_name(log_dir, name, expect_single=False):
     tasks, _ = get_tasks_from_rec_file(log_dir)
     tasks_with_name = [t for t in tasks.values() if t['name'] == name]
     if expect_single and tasks_with_name:
-        nameed_task_count = len(tasks_with_name)
-        assert nameed_task_count == 1, "Expecting single task with name '%s', but found %s" % (name, nameed_task_count)
+        named_task_count = len(tasks_with_name)
+        assert named_task_count == 1, "Expecting single task with name '%s', but found %s" % (name, named_task_count)
         return tasks_with_name[0]
     return tasks_with_name
 

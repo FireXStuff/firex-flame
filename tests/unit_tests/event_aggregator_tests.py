@@ -104,7 +104,6 @@ class EventAggregatorTests(unittest.TestCase):
         ]
         self.assertEqual(expected_states, aggregator.tasks_by_uuid[basic_event['uuid']]['states'])
 
-
     def test_aggregate_non_celery_field(self):
         aggregator = FlameEventAggregator()
         event1 = {**basic_event, 'url': 'some_url'}
