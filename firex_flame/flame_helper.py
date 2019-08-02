@@ -89,6 +89,14 @@ def get_rec_file(log_dir):
     return os.path.join(get_flame_debug_dir(log_dir), 'flame.rec')
 
 
+def find_rec_file(log_dir):
+    rec_file = get_rec_file(log_dir)
+    if os.path.isfile(rec_file):
+        return rec_file
+    old_rec_file = get_old_rec_file(log_dir)
+    return old_rec_file
+
+
 def get_old_rec_file(log_dir):
     return os.path.join(log_dir, 'flame.rec')
 

@@ -23,6 +23,14 @@ def get_flame_old_model_dir(firex_logs_dir):
     return os.path.join(firex_logs_dir, 'flame_model')
 
 
+# Temporarily support both current and old model directory locations.
+def find_flame_model_dir(firex_logs_dir):
+    model_dir = get_flame_model_dir(firex_logs_dir)
+    if os.path.isdir(model_dir):
+        return model_dir
+    return get_flame_old_model_dir(firex_logs_dir)
+
+
 def _get_base_model_dir(firex_logs_dir=None, root_model_dir=None):
     assert bool(firex_logs_dir) ^ bool(root_model_dir), \
         "Need exclusively either logs dir or root model dir."

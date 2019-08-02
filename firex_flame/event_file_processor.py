@@ -3,10 +3,10 @@ import os
 import gzip
 import json
 
-from firex_flame.model_dumper import FlameModelDumper, get_flame_model_dir, get_model_full_tasks_by_names, \
+from firex_flame.model_dumper import FlameModelDumper, find_flame_model_dir, get_model_full_tasks_by_names, \
     index_tasks_by_names, get_full_tasks_by_slim_pred
 from firex_flame.event_aggregator import FlameEventAggregator, TASK_ARGS
-from firex_flame.flame_helper import get_rec_file, find
+from firex_flame.flame_helper import find_rec_file, find
 
 
 def process_recording_file(event_aggregator: FlameEventAggregator, recording_file: str, run_metadata: dict):
@@ -51,7 +51,7 @@ def dumper_main():
 def get_tasks_from_rec_file(log_dir=None, rec_filepath=None):
     assert bool(log_dir) ^ bool(rec_filepath), "Need exclusively either log directory of rec_file path."
     if not rec_filepath:
-        rec_file = get_rec_file(log_dir)
+        rec_file = find_rec_file(log_dir)
     else:
         rec_file = rec_filepath
     assert os.path.exists(rec_file), "Recording file not found: %s" % rec_file
@@ -62,10 +62,10 @@ def get_tasks_from_rec_file(log_dir=None, rec_filepath=None):
 
 
 def get_model_or_rec_full_tasks_by_names(logs_dir, task_names):
-    if os.path.isdir(get_flame_model_dir(logs_dir)):
+    if os.path.isdir(find_flame_model_dir(logs_dir)):
         return get_model_full_tasks_by_names(logs_dir, task_names)
 
-    rec_file = get_rec_file(logs_dir)
+    rec_file = find_rec_file(logs_dir)
     if os.path.isfile(rec_file):
         tasks_by_uuid, _ = get_tasks_from_rec_file(rec_filepath=rec_file)
         return index_tasks_by_names(tasks_by_uuid.values(), task_names)
@@ -74,10 +74,10 @@ def get_model_or_rec_full_tasks_by_names(logs_dir, task_names):
 
 
 def get_model_or_rec_full_tasks_by_uuids(logs_dir, uuids):
-    if os.path.isdir(get_flame_model_dir(logs_dir)):
+    if os.path.isdir(find_flame_model_dir(logs_dir)):
         return get_full_tasks_by_slim_pred(logs_dir, lambda st: st['uuid'] in uuids)
 
-    rec_file = get_rec_file(logs_dir)
+    rec_file = find_rec_file(logs_dir)
     if os.path.isfile(rec_file):
         tasks_by_uuid, _ = get_tasks_from_rec_file(rec_filepath=rec_file)
         return {u: t for u, t in tasks_by_uuid.items() if u in uuids}
