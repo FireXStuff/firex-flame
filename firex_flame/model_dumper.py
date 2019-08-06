@@ -35,7 +35,7 @@ def _get_base_model_dir(firex_logs_dir=None, root_model_dir=None):
     assert bool(firex_logs_dir) ^ bool(root_model_dir), \
         "Need exclusively either logs dir or root model dir."
     if firex_logs_dir:
-        return get_flame_model_dir(firex_logs_dir)
+        return find_flame_model_dir(firex_logs_dir)
     else:
         return root_model_dir
 
