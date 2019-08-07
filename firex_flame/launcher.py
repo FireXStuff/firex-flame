@@ -11,7 +11,8 @@ from firexapp.submit.console import setup_console_logging
 from firexapp.submit.uid import Uid
 
 from firex_flame.flame_helper import DEFAULT_FLAME_TIMEOUT, wait_until_web_request_ok, get_flame_debug_dir, \
-    wait_until_path_exist, get_rec_file, get_flame_url, get_old_rec_file
+    wait_until_path_exist, get_rec_file, get_flame_url, get_old_rec_file, web_request_ok
+from firex_flame.model_dumper import is_dump_complete
 
 FLAME_LOG_REGISTRY_KEY = 'FLAME_OUTPUT_LOG_REGISTRY_KEY2'
 FileRegistry().register_file(FLAME_LOG_REGISTRY_KEY, os.path.join(Uid.debug_dirname, 'flame.stdout'))
@@ -78,6 +79,12 @@ def get_flame_args(port, uid, broker_recv_ready_file, args):
 
 class FlameLauncher(TrackingService):
 
+    def __init__(self):
+        self.flame_url = None
+        self.broker_recv_ready_file = None
+        self.sync = None
+        self.firex_logs_dir = None
+
     def extra_cli_arguments(self, arg_parser):
         arg_parser.add_argument('--flame_timeout', help='How long the webserver should run for, in seconds.',
                                 default=DEFAULT_FLAME_TIMEOUT)
@@ -120,9 +127,11 @@ class FlameLauncher(TrackingService):
 
     def start(self, args, uid=None, **kwargs)->{}:
         port = int(args.flame_port) if args.flame_port else get_available_port()
-        broker_recv_ready_file = os.path.join(get_flame_debug_dir(uid.logs_dir), 'celery_receiver_ready')
+        self.broker_recv_ready_file = os.path.join(get_flame_debug_dir(uid.logs_dir), 'celery_receiver_ready')
+        self.sync = args.sync
+        self.firex_logs_dir = uid.logs_dir
 
-        flame_args = get_flame_args(port, uid, broker_recv_ready_file, args)
+        flame_args = get_flame_args(port, uid, self.broker_recv_ready_file, args)
         cmd = 'firex_flame %s &' % ' '.join(flame_args)
 
         # start the flame service and return the port
@@ -130,9 +139,24 @@ class FlameLauncher(TrackingService):
         with open(flame_stdout, 'wb') as out:
             subprocess.check_call(cmd, shell=True, stdout=out, stderr=subprocess.STDOUT)
 
-        flame_url = get_flame_url(port)
+        self.flame_url = get_flame_url(port)
+        # TODO: remove startup wait now that tracking service API supports 'read_for_tasks'
         if args.flame_startup_wait > 0:
-            wait_webserver_and_celery_recv_ready(flame_url, broker_recv_ready_file, args.flame_startup_wait,
+            wait_webserver_and_celery_recv_ready(self.flame_url, self.broker_recv_ready_file, args.flame_startup_wait,
                                                  args.flame_require_up_after_wait)
-        logger.info('Flame: %s' % flame_url)
+        logger.info('Flame: %s' % self.flame_url)
         return {"flame_port": port}
+
+    def ready_for_tasks(self, **kwargs)->bool:
+        webserver_alive = web_request_ok(urllib.parse.urljoin(self.flame_url, '/alive'))
+        broker_recv_ready = os.path.isfile(self.broker_recv_ready_file)
+
+        return webserver_alive and broker_recv_ready
+
+    def ready_release_console(self, **kwargs)->bool:
+        if self.sync:
+            # For sync requests, guarantee that the model is completely dumped before terminating.
+            return is_dump_complete(self.firex_logs_dir)
+        else:
+            logger.info('See Flame to monitor the status of your run at: %s' % self.flame_url)
+            return True

@@ -41,14 +41,15 @@ def wait_until_pid_not_exist(pid, timeout=7, sleep_for=1):
     return wait_until(lambda p: not psutil.pid_exists(p), timeout, sleep_for, pid)
 
 
-def wait_until_web_request_ok(url, timeout=10, sleep_for=1):
-    def try_request_get(url):
-        try:
-            return requests.get(url).ok
-        except requests.exceptions.ConnectionError:
-            return False
+def web_request_ok(url):
+    try:
+        return requests.get(url).ok
+    except requests.exceptions.ConnectionError:
+        return False
 
-    return wait_until(try_request_get, timeout, sleep_for, url)
+
+def wait_until_web_request_ok(url, timeout=10, sleep_for=1):
+    return wait_until(web_request_ok, timeout, sleep_for, url)
 
 
 def wait_until_path_exist(path, timeout=7, sleep_for=1):
@@ -89,8 +90,9 @@ def get_rec_file(log_dir):
     return os.path.join(get_flame_debug_dir(log_dir), 'flame.rec')
 
 
+# Temporarily support both current and old rec file locations.
 def find_rec_file(log_dir):
-    rec_file = get_rec_file(log_dir)
+    rec_file = get_rec_file(log_dir) 
     if os.path.isfile(rec_file):
         return rec_file
     old_rec_file = get_old_rec_file(log_dir)

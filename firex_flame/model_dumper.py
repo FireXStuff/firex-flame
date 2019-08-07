@@ -52,6 +52,10 @@ def get_tasks_slim_file(firex_logs_dir=None, root_model_dir=None):
     return os.path.join(_get_base_model_dir(firex_logs_dir, root_model_dir), 'slim-tasks.json')
 
 
+def get_model_complete_file(firex_logs_dir=None, root_model_dir=None):
+    return os.path.join(_get_base_model_dir(firex_logs_dir, root_model_dir), 'model-complete')
+
+
 def load_slim_tasks(log_dir):
     return json.loads(Path(get_tasks_slim_file(log_dir)).read_text())
 
@@ -82,9 +86,7 @@ def get_full_tasks_by_slim_pred(log_dir, slim_predicate):
 
 
 def is_dump_complete(firex_logs_dir):
-    def is_model_complete(run_metadata):
-        return run_metadata['flame_recv_complete']
-    return json_file_predicate(get_run_metadata_file(firex_logs_dir=firex_logs_dir), is_model_complete)
+    return os.path.exists(get_model_complete_file(firex_logs_dir=firex_logs_dir))
 
 
 class FlameModelDumper:
@@ -141,4 +143,5 @@ class FlameModelDumper:
             for path in paths_to_compress:
                 tar.add(path, arcname=os.path.basename(path))
 
+        Path(get_model_complete_file(root_model_dir=self.root_model_dir)).touch()
         logger.info("Finished dumping complete Flame model.")
