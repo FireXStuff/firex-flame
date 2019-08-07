@@ -11,7 +11,7 @@ from firexapp.submit.console import setup_console_logging
 from firexapp.submit.uid import Uid
 
 from firex_flame.flame_helper import DEFAULT_FLAME_TIMEOUT, wait_until_web_request_ok, get_flame_debug_dir, \
-    wait_until_path_exist, get_rec_file, get_flame_url, get_old_rec_file, web_request_ok
+    wait_until_path_exist, get_rec_file, get_flame_url, get_old_rec_file, web_request_ok, create_rel_symlink
 from firex_flame.model_dumper import is_dump_complete
 
 FLAME_LOG_REGISTRY_KEY = 'FLAME_OUTPUT_LOG_REGISTRY_KEY2'
@@ -54,7 +54,7 @@ def get_flame_args(port, uid, broker_recv_ready_file, args):
         rec_file = args.flame_record
     else:
         rec_file = get_rec_file(uid.logs_dir)
-        os.symlink(rec_file, get_old_rec_file(uid.logs_dir))
+        create_rel_symlink(rec_file, get_old_rec_file(uid.logs_dir))
 
     # assemble startup cmd
     cmd_args = {

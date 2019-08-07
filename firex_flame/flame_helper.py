@@ -139,3 +139,8 @@ def kill_and_wait(pid, sig=signal.SIGKILL, timeout=10):
         os.kill(pid, sig)
         wait_until_pid_not_exist(pid, timeout=timeout)
     return not psutil.pid_exists(pid)
+
+
+def create_rel_symlink(existing_path, symlink, target_is_directory=False):
+    rel_new_file = os.path.relpath(existing_path, start=os.path.dirname(symlink))
+    os.symlink(rel_new_file, symlink, target_is_directory=target_is_directory)

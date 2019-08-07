@@ -5,7 +5,7 @@ from pathlib import Path
 import tarfile
 
 from firex_flame.event_aggregator import slim_tasks_by_uuid, COMPLETE_STATES
-from firex_flame.flame_helper import json_file_predicate, get_flame_debug_dir
+from firex_flame.flame_helper import get_flame_debug_dir, create_rel_symlink
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ class FlameModelDumper:
             "Dumper needs exclusively either logs dir or root model dir."
         if firex_logs_dir:
             self.root_model_dir = get_flame_model_dir(firex_logs_dir)
-            os.symlink(self.root_model_dir, get_flame_old_model_dir(firex_logs_dir), target_is_directory=True)
+            create_rel_symlink(self.root_model_dir, get_flame_old_model_dir(firex_logs_dir), target_is_directory=True)
         else:
             self.root_model_dir = root_model_dir
         os.makedirs(self.root_model_dir, exist_ok=True)
