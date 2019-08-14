@@ -65,16 +65,23 @@ class BrokerEventConsumerThread(threading.Thread):
     def run(self):
         self._run_from_broker()
 
+    def _cleanup(self):
+        try:
+            self._cleanup_tasks()
+            self.flame_controller.dump_complete_data_model(self.event_aggregator)
+            if self.terminate_on_complete and not self.stopped_externally:
+                stop_main_thread("Terminating on completion, as requested by input args.")
+        except Exception as e:
+            logger.error("Failed to cleanup during receiver completion.")
+            logger.exception(e)
+
     def _run_from_broker(self):
         self.flame_controller.dump_initial_metadata()
         """Load the events from celery"""
         try:
             self._capture_events()
         finally:
-            self._cleanup_tasks()
-            self.flame_controller.dump_complete_data_model(self.event_aggregator)
-            if self.terminate_on_complete and not self.stopped_externally:
-                stop_main_thread("Terminating on completion, as requested by input args.")
+            self._cleanup()
 
     def _capture_events(self):
         try_interval = 1
