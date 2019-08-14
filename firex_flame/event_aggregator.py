@@ -101,8 +101,8 @@ FIELD_TO_CELERY_TRANSFORMS = {k: v['transform_celery'] for k, v in FIELD_CONFIG.
 
 STATE_TYPES = {
     'task-received': {'terminal': False},
-    'task-blocked': {'terminal': False},
     'task-started': {'terminal': False},
+    'task-blocked': {'terminal': False},
     'task-unblocked': {'terminal': False},
     'task-succeeded': {'terminal': True},
     'task-failed': {'terminal': True},

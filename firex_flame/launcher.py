@@ -147,13 +147,13 @@ class FlameLauncher(TrackingService):
         logger.info('Flame: %s' % self.flame_url)
         return {"flame_port": port}
 
-    def ready_for_tasks(self, **kwargs)->bool:
+    def ready_for_tasks(self, **kwargs) -> bool:
         webserver_alive = web_request_ok(urllib.parse.urljoin(self.flame_url, '/alive'))
         broker_recv_ready = os.path.isfile(self.broker_recv_ready_file)
 
         return webserver_alive and broker_recv_ready
 
-    def ready_release_console(self, **kwargs)->bool:
+    def ready_release_console(self, **kwargs) -> bool:
         if self.sync:
             # For sync requests, guarantee that the model is completely dumped before terminating.
             return is_dump_complete(self.firex_logs_dir)
