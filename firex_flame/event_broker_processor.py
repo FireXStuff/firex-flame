@@ -69,11 +69,13 @@ class BrokerEventConsumerThread(threading.Thread):
         try:
             self._cleanup_tasks()
             self.flame_controller.dump_complete_data_model(self.event_aggregator)
-            if self.terminate_on_complete and not self.stopped_externally:
-                stop_main_thread("Terminating on completion, as requested by input args.")
         except Exception as e:
             logger.error("Failed to cleanup during receiver completion.")
             logger.exception(e)
+        finally:
+            logger.info("Completed receiver cleanup.")
+            if self.terminate_on_complete and not self.stopped_externally:
+                stop_main_thread("Terminating on completion, as requested by input args.")
 
     def _run_from_broker(self):
         self.flame_controller.dump_initial_metadata()

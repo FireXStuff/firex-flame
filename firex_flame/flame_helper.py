@@ -81,6 +81,7 @@ def stop_main_thread(reason):
     logging.info("Stopping entire Flame Server for reason: %s" % reason)
     if threading.current_thread() is threading.main_thread():
         logger.info('Stopped from main thread, will sysexit.')
+        logging.shutdown()
         sys.exit(0)
     else:
         _interrupt_main_thread()
