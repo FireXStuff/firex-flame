@@ -57,7 +57,10 @@ FIELD_CONFIG = {
     'firex_result': {'copy_celery': True},
     'traceback': {'copy_celery': True},
     'exception': {'copy_celery': True, 'slim_field': True},
-    'long_name': {'copy_celery': True},
+    'long_name': {
+        'copy_celery': True,
+        'transform_celery': lambda e: {'name': e['long_name'].split('.')[-1]},
+    },
     'flame_data': {
         'copy_celery': True,
         'slim_field': True,
@@ -65,9 +68,10 @@ FIELD_CONFIG = {
     },
     'state': {'slim_field': True},
     'task_num': {'slim_field': True},
-    'name': {
+    'name': {'slim_field': True},
+    'called_as_orig': {
+        'copy_celery': True,
         'slim_field': True,
-        'transform_celery': lambda e: {'name': e['name'].split('.')[-1], 'long_name': e['name']},
     },
     'first_started': {'slim_field': True, 'aggregate_keep_initial': True},
     'url': {

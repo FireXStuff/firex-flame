@@ -157,6 +157,4 @@ class FlameLauncher(TrackingService):
         if self.sync:
             # For sync requests, guarantee that the model is completely dumped before terminating.
             return is_dump_complete(self.firex_logs_dir)
-        else:
-            logger.info('See Flame to monitor the status of your run at: %s' % self.flame_url)
-            return True
+        return True
