@@ -2,10 +2,9 @@ import unittest
 
 from firex_flame.event_aggregator import FlameEventAggregator
 
-basic_event = {'uuid': '1', 'name': 'prefix.SomeTask', 'type': 'task-started', 'timestamp': 0}
+basic_event = {'uuid': '1', 'long_name': 'prefix.SomeTask', 'type': 'task-started', 'timestamp': 0}
 basic_event_added_fields = {
             'state': basic_event['type'],
-            'long_name': basic_event['name'],
             'task_num': 1,
             'name': 'SomeTask',
             'states': [{'state': basic_event['type'], 'timestamp': basic_event['timestamp']}],

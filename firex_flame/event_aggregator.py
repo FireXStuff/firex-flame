@@ -68,7 +68,10 @@ FIELD_CONFIG = {
     },
     'state': {'slim_field': True},
     'task_num': {'slim_field': True},
-    'name': {'slim_field': True},
+    'name': {
+        'slim_field': True,
+        'copy_celery': True,  # TODO: firexapp should send long_name, since it will overwrite 'name' copied from celery.
+    },
     'called_as_orig': {
         'copy_celery': True,
         'slim_field': True,
