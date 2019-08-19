@@ -70,7 +70,9 @@ FIELD_CONFIG = {
     'task_num': {'slim_field': True},
     'name': {
         'slim_field': True,
-        'copy_celery': True,  # TODO: firexapp should send long_name, since it will overwrite 'name' copied from celery.
+        # TODO: firexapp should send long_name, since it will overwrite 'name' copied from celery. Then get rid of
+        # the following config.
+        'transform_celery': lambda e: {'name': e['name'].split('.')[-1], 'long_name': e['name']},
     },
     'called_as_orig': {
         'copy_celery': True,
