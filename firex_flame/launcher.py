@@ -77,6 +77,14 @@ def get_flame_args(port, uid, broker_recv_ready_file, args):
     return ['--%s "%s"' % (k, v) for k, v in cmd_args.items() if v]
 
 
+def url_join(host, start_path, end_path):
+    if start_path.endswith('/'):
+        path = start_path + end_path
+    else:
+        path = '%s/%s' % (start_path, end_path)
+    return urllib.parse.urljoin(host, path)
+
+
 class FlameLauncher(TrackingService):
 
     def __init__(self):
@@ -140,11 +148,17 @@ class FlameLauncher(TrackingService):
             subprocess.check_call(cmd, shell=True, stdout=out, stderr=subprocess.STDOUT)
 
         self.flame_url = get_flame_url(port)
-        # TODO: remove startup wait now that tracking service API supports 'read_for_tasks'
+        # TODO: remove startup wait now that tracking service API supports 'ready_for_tasks'
         if args.flame_startup_wait > 0:
             wait_webserver_and_celery_recv_ready(self.flame_url, self.broker_recv_ready_file, args.flame_startup_wait,
                                                  args.flame_require_up_after_wait)
-        logger.info('Flame: %s' % self.flame_url)
+
+        if args.flame_central_server and args.flame_central_server_ui_path:
+            display_url = url_join(args.flame_central_server, args.flame_central_server_ui_path, str(uid))
+        else:
+            display_url = self.flame_url
+
+        logger.info('Flame: %s' % display_url)
         return {"flame_port": port}
 
     def ready_for_tasks(self, **kwargs) -> bool:
