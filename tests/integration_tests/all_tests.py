@@ -18,9 +18,10 @@ from firexkit.chain import returns
 
 from firex_flame.event_file_processor import get_tasks_from_rec_file
 from firex_flame.flame_helper import get_flame_pid, wait_until_pid_not_exist, wait_until, get_rec_file, filter_paths, \
-    kill_flame, kill_and_wait
+    kill_flame, kill_and_wait, json_file_fn
 from firex_flame.event_aggregator import INCOMPLETE_STATES, COMPLETE_STATES
-from firex_flame.model_dumper import get_tasks_slim_file, get_model_full_tasks_by_names, is_dump_complete
+from firex_flame.model_dumper import get_tasks_slim_file, get_model_full_tasks_by_names, is_dump_complete, \
+    get_run_metadata_file
 
 
 def flame_url_from_output(cmd_output):
@@ -108,6 +109,7 @@ class FlameLaunchWithCentralServerTest(FlameFlowTestConfiguration):
                 '--flame_central_server_ui_path', self.central_server_ui_path]
 
     def assert_on_flame_url(self, log_dir, flame_url):
+        flame_url = json_file_fn(get_run_metadata_file(firex_logs_dir=log_dir), lambda d: d['flame_url'])
         root_request = requests.get(flame_url)
         assert root_request.ok, 'Expected OK response when fetching main page: %s' % root_request.status_code
 

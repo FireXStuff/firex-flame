@@ -56,7 +56,7 @@ def wait_until_path_exist(path, timeout=7, sleep_for=1):
     return wait_until(os.path.exists, timeout, sleep_for, path)
 
 
-def json_file_predicate(json_file_path, pred):
+def json_file_fn(json_file_path, fn):
     if not os.path.isfile(json_file_path):
         return False
     try:
@@ -64,7 +64,7 @@ def json_file_predicate(json_file_path, pred):
     except (json.decoder.JSONDecodeError, OSError):
         return False
     else:
-        return pred(file_data)
+        return fn(file_data)
 
 
 def _interrupt_main_thread():
