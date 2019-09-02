@@ -4,18 +4,13 @@ import time
 import urllib.parse
 
 from firexapp.broker_manager.broker_factory import BrokerFactory
-from firexapp.common import get_available_port
-from firexapp.fileregistry import FileRegistry
+from firexapp.common import get_available_port, qualify_firex_bin, select_env_vars
 from firexapp.submit.tracking_service import TrackingService
 from firexapp.submit.console import setup_console_logging
-from firexapp.submit.uid import Uid
 
 from firex_flame.flame_helper import DEFAULT_FLAME_TIMEOUT, wait_until_web_request_ok, get_flame_debug_dir, \
     wait_until_path_exist, get_rec_file, get_flame_url, get_old_rec_file, web_request_ok, create_rel_symlink
 from firex_flame.model_dumper import is_dump_complete
-
-FLAME_LOG_REGISTRY_KEY = 'FLAME_OUTPUT_LOG_REGISTRY_KEY2'
-FileRegistry().register_file(FLAME_LOG_REGISTRY_KEY, os.path.join(Uid.debug_dirname, 'flame.stdout'))
 
 logger = setup_console_logging(__name__)
 
@@ -73,8 +68,12 @@ def get_flame_args(port, uid, broker_recv_ready_file, args):
         'terminate_on_complete': args.flame_terminate_on_complete,
         'firex_bin_path': args.firex_bin_path,
     }
-
-    return ['--%s "%s"' % (k, v) for k, v in cmd_args.items() if v]
+    result = []
+    for k, v in cmd_args.items():
+        if v is not None:
+            result.append('--%s' % k)
+            result.append('%s' % v)
+    return result
 
 
 def url_join(host, start_path, end_path):
@@ -140,12 +139,15 @@ class FlameLauncher(TrackingService):
         self.firex_logs_dir = uid.logs_dir
 
         flame_args = get_flame_args(port, uid, self.broker_recv_ready_file, args)
-        cmd = 'firex_flame %s &' % ' '.join(flame_args)
 
         # start the flame service and return the port
-        flame_stdout = FileRegistry().get_file(FLAME_LOG_REGISTRY_KEY, uid.logs_dir)
-        with open(flame_stdout, 'wb') as out:
-            subprocess.check_call(cmd, shell=True, stdout=out, stderr=subprocess.STDOUT)
+        try:
+            subprocess.Popen([qualify_firex_bin("firex_flame")] + flame_args,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT,              
+                             close_fds=True, env=select_env_vars(['PATH']))
+        except Exception as e:
+            logger.error("Flame subprocess start failed: %s." % e)
+            raise
 
         self.flame_url = get_flame_url(port)
         # TODO: remove startup wait now that tracking service API supports 'ready_for_tasks'
