@@ -49,7 +49,6 @@ def get_flame_args(port, uid, broker_recv_ready_file, args):
         rec_file = args.flame_record
     else:
         rec_file = get_rec_file(uid.logs_dir)
-        create_rel_symlink(rec_file, get_old_rec_file(uid.logs_dir))
 
     # assemble startup cmd
     cmd_args = {

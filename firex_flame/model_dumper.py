@@ -96,14 +96,13 @@ class FlameModelDumper:
             "Dumper needs exclusively either logs dir or root model dir."
         if firex_logs_dir:
             self.root_model_dir = get_flame_model_dir(firex_logs_dir)
-            create_rel_symlink(self.root_model_dir, get_flame_old_model_dir(firex_logs_dir), target_is_directory=True)
         else:
             self.root_model_dir = root_model_dir
         os.makedirs(self.root_model_dir, exist_ok=True)
 
-    def dump_metadata(self, run_metadata, run_complete, flame_complete):
+    def dump_metadata(self, run_metadata, root_complete, flame_complete):
         metadata_model_file = get_run_metadata_file(root_model_dir=self.root_model_dir)
-        complete = {'run_complete': run_complete, 'flame_recv_complete': flame_complete}
+        complete = {'run_complete': root_complete, 'flame_recv_complete': flame_complete}
         _write_json(metadata_model_file, {**complete, **run_metadata})
         return metadata_model_file
 
@@ -133,9 +132,9 @@ class FlameModelDumper:
         if run_metadata:
             # Write metadata file.
             # Note that since a flame can terminate (e.g. via timeout) before a run, there is no guarantee
-            # that the run_metadata model file will ever have run_complete: true.
-            run_complete = tasks_by_uuid.get(root_uuid, {'state': None})['state'] in COMPLETE_STATES
-            metadata_model_file = self.dump_metadata(run_metadata, run_complete, flame_complete=True)
+            # that the run_metadata model file will ever have root_complete: true.
+            root_complete = tasks_by_uuid.get(root_uuid, {'state': None})['state'] in COMPLETE_STATES
+            metadata_model_file = self.dump_metadata(run_metadata, root_complete, flame_complete=True)
             paths_to_compress.append(metadata_model_file)
 
         # Write a tar.gz file containing all the files dumped above.

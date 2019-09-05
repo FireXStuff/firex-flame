@@ -29,7 +29,8 @@ class BrokerConsumerConfig:
 class BrokerEventConsumerThread(threading.Thread):
     """Events threading class
     """
-    def __init__(self, celery_app, flame_controller: FlameAppController, event_aggregator, config, recording_file):
+    def __init__(self, celery_app, flame_controller: FlameAppController, event_aggregator, config: BrokerConsumerConfig,
+                 recording_file: str):
         threading.Thread.__init__(self)
         self.celery_app = celery_app
         self.recording_file = recording_file

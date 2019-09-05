@@ -22,7 +22,7 @@ class FlameAppController:
             self.sio_server.emit('tasks-update', update_data_by_uuid)
 
     def dump_initial_metadata(self):
-        self.model_dumper.dump_metadata(self.run_metadata, run_complete=False, flame_complete=False)
+        self.model_dumper.dump_metadata(self.run_metadata, root_complete=False, flame_complete=False)
 
     def dump_complete_data_model(self, event_aggregator):
         self.model_dumper.dump_aggregator_complete_data_model(event_aggregator, self.run_metadata)
