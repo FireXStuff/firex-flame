@@ -25,6 +25,7 @@ setup(name='firex_flame',
             "firex_flame_ui<0.22",
             "requests",
             "beautifulsoup4",
+            "importlib_resources",
       ],
       package_data={
         'firex_flame': ['templates/*.html'],

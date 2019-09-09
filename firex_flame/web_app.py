@@ -2,15 +2,27 @@ from glob import glob
 import json
 import logging
 import os
-import pkg_resources
+import importlib_resources
 import urllib.parse
+from contextlib import ExitStack
+import atexit
 
 from flask import Flask, Blueprint, redirect, send_from_directory, Response, render_template
 from flask_autoindex import AutoIndexBlueprint
 
 logger = logging.getLogger(__name__)
 
-UI_RESOURCE_DIR = pkg_resources.resource_filename('firex_flame_ui', './')
+# This static directory can be used during development to test unreleased versions of the UI.
+static_files_dir = os.path.join(os.path.dirname(__file__), "static")
+
+if os.path.isdir(static_files_dir):
+    UI_RESOURCE_DIR = static_files_dir
+else:
+    # Load UI from pypi install case.
+    file_manager = ExitStack()
+    atexit.register(file_manager.close)
+    UI_RESOURCE_DIR = str(file_manager.enter_context(importlib_resources.path('firex_flame_ui', '')))
+
 REL_UI_RESOURCE_PATH = '/ui'
 
 # Never changes per flame instance, populated on first request.
