@@ -30,6 +30,7 @@ def get_flame_args(port, uid, broker_recv_ready_file, args):
         'recording': rec_file,
         'central_server': args.flame_central_server,
         'central_server_ui_path': args.flame_central_server_ui_path,
+        'logs_server': args.flame_logs_server,
         'central_documentation_url': args.flame_central_documentation_url,
         'flame_timeout': args.flame_timeout,
         'broker_recv_ready_file': broker_recv_ready_file,
@@ -70,6 +71,9 @@ class FlameLauncher(TrackingService):
                                 default=None)
         arg_parser.add_argument('--flame_central_server_ui_path',
                                 help='Path relative to flame_central_server from which the Flame UI is served.',
+                                default=None)
+        arg_parser.add_argument('--flame_logs_server',
+                                help='Server URL from which flame logs can be fetched.',
                                 default=None)
         arg_parser.add_argument('--flame_central_documentation_url',
                                 help='URL linking to main out-of-app docs.',
