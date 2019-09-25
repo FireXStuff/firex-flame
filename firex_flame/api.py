@@ -19,6 +19,7 @@ def _run_metadata_to_api_model(run_metadata, root_uuid):
         'logs_dir': run_metadata['logs_dir'],
         'root_uuid': root_uuid,
         'chain': run_metadata['chain'],
+        'logs_server': run_metadata['logs_server'],
     }
 
 
