@@ -112,7 +112,11 @@ def create_ui_config(run_metadata):
         "central_server": run_metadata['central_server'],
         "central_server_ui_path": run_metadata['central_server_ui_path'],
         "central_documentation_url": run_metadata['central_documentation_url'],
-        'firex_bin': run_metadata['firex_bin'],
+        "firex_bin": run_metadata['firex_bin'],
+        "logs_serving": {
+            "serve_mode": "central-webserver",
+            "url_format": None,
+        }
     }
 
 
