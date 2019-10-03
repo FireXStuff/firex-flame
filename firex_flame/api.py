@@ -65,6 +65,24 @@ def create_socketio_task_api(sio_server, event_aggregator, run_metadata):
                 response = [event_aggregator.tasks_by_uuid.get(u, None) for u in uuids]
             sio_server.emit('task-details', response, room=sid)
 
+    @sio_server.on('start-listen-file')
+    def emit_times(sid, args):
+        from eventlet import spawn
+        import time
+        def write_times():
+            while True:
+                line = '%s:%s <%s>' % (args['host'], args['filepath'], time.time())
+                sio_server.emit('file-line', line, room=sid)
+                time.sleep(10)
+        # TODO: store this greenthread by sid so that it can be killed when stop-listen-file is received.
+        greenthread = spawn(write_times)
+
+
+    @sio_server.on('stop-listen-file')
+    def stop_emit_times(sid):
+        # use sid to lookup greenthread  and do  greenthread.kill()
+        pass
+
 
 def create_rest_task_api(web_app, event_aggregator, run_metadata):
 
