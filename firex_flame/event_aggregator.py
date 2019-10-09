@@ -76,7 +76,6 @@ FIELD_CONFIG = {
     },
     'called_as_orig': {
         'copy_celery': True,
-        'slim_field': True,
     },
     'first_started': {'slim_field': True, 'aggregate_keep_initial': True},
     'url': {
