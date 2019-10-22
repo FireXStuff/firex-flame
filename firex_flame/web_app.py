@@ -9,6 +9,7 @@ import atexit
 
 from flask import Flask, Blueprint, redirect, send_from_directory, Response, render_template
 from flask_autoindex import AutoIndexBlueprint
+from firexapp.submit.reporting import REL_COMPLETION_REPORT_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +117,8 @@ def create_ui_config(run_metadata):
         "logs_serving": {
             "serve_mode": "central-webserver",
             "url_format": None,
-        }
+        },
+        'rel_completion_report_path': REL_COMPLETION_REPORT_PATH,
     }
 
 
