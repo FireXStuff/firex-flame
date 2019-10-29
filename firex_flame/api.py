@@ -10,7 +10,12 @@ from firex_flame.flame_helper import wait_until
 
 from firex_flame.event_aggregator import slim_tasks_by_uuid, INCOMPLETE_STATES
 
+from eventlet import spawn
+from eventlet.green import subprocess
+
 logger = logging.getLogger(__name__)
+
+subprocess_dict = {}
 
 
 def _run_metadata_to_api_model(run_metadata, root_uuid):
@@ -26,6 +31,49 @@ def _run_metadata_to_api_model(run_metadata, root_uuid):
 def _get_task_fields(tasks_by_uuid, fields):
     return {uuid: {f: v for f, v in task.items() if f in fields}
             for uuid, task in tasks_by_uuid.items()}
+
+
+def monitor_file(sio_server, sid, host, filename):
+    # spawn ssh to host to tail -f the file - output to be sent to requesting client
+    logger.info("Will start monitoring file %s on host %s" % (filename, host))
+    # noinspection PyBroadException
+    try:
+        # noinspection PyUnresolvedReferences
+        p = subprocess.Popen(["/bin/ssh", "-t", "-t", host,
+                              "/usr/bin/tail -n +1 --follow=name %s 2>/dev/null" % filename],
+                             bufsize=1, stdout=subprocess.PIPE, universal_newlines=True)
+    except Exception:
+        sio_server.emit('file-line', "Spawned subprocess to monitor file failed to start.", room=sid)
+        return
+
+    # Keep track of all spawned processes to be able to manage them later
+    subprocess_dict[sid] = p
+
+    num_lines = 0
+    for line in iter(p.stdout.readline, ''):
+        if not line or line == '':
+            break
+        num_lines += 1
+        sio_server.emit('file-line', line, room=sid)
+    if num_lines:
+        sio_server.emit('file-line', '[end of file - program exited]', room=sid)
+    else:
+        sio_server.emit('file-line', '[temporary file no longer exists since command has completed]', room=sid)
+
+
+def term_subproc(sid):
+    if sid not in subprocess_dict:
+        logger.warning("SID %s not in subprocess list" % sid)
+        return
+
+    subproc = subprocess_dict[sid]
+    subproc.terminate()
+    del subprocess_dict[sid]
+
+
+def term_all_subprocs():
+    for sid in subprocess_dict:
+        term_subproc(sid)
 
 
 def create_socketio_task_api(sio_server, event_aggregator, run_metadata):
@@ -64,6 +112,19 @@ def create_socketio_task_api(sio_server, event_aggregator, run_metadata):
             else:
                 response = [event_aggregator.tasks_by_uuid.get(u, None) for u in uuids]
             sio_server.emit('task-details', response, room=sid)
+
+    @sio_server.on('start-listen-file')
+    def start_file_monitor(sid, args):
+        if 'host' not in args or 'filepath' not in args:
+            sio_server.emit('file-line',
+                            "File monitoring request is missing either host and/or filepath parameters: %s" % args,
+                            room=sid)
+        else:
+            spawn(monitor_file, sio_server=sio_server, sid=sid, host=args['host'], filename=args['filepath'])
+
+    @sio_server.on('stop-listen-file')
+    def stop_file_monitor(sid):
+        term_subproc(sid)
 
 
 def create_rest_task_api(web_app, event_aggregator, run_metadata):

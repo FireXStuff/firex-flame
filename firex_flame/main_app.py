@@ -6,7 +6,7 @@ import celery
 import socketio
 import eventlet
 
-from firex_flame.api import create_socketio_task_api, create_revoke_api, create_rest_task_api
+from firex_flame.api import create_socketio_task_api, create_revoke_api, create_rest_task_api, term_all_subprocs
 from firex_flame.controller import FlameAppController
 from firex_flame.event_file_processor import process_recording_file
 from firex_flame.event_broker_processor import BrokerEventConsumerThread, BrokerConsumerConfig
@@ -44,3 +44,5 @@ def run_flame(broker_consumer_config, web_port, run_metadata, recording_file):
         eventlet.wsgi.server(eventlet.listen(('', web_port)), sio_web_app)
     except KeyboardInterrupt:
         logger.info('KeyboardInterrupt - Shutting down')
+
+    term_all_subprocs()
