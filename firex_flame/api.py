@@ -41,7 +41,7 @@ def monitor_file(sio_server, sid, host, filename):
         # noinspection PyUnresolvedReferences
         p = subprocess.Popen(["/bin/ssh", "-t", "-t", host,
                               "/usr/bin/tail -n +1 --follow=name %s 2>/dev/null" % filename],
-                             bufsize=1, stdout=subprocess.PIPE, universal_newlines=True)
+                             bufsize=1, stdout=subprocess.PIPE)
     except Exception:
         sio_server.emit('file-line', "Spawned subprocess to monitor file failed to start.", room=sid)
         return
