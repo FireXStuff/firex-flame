@@ -54,7 +54,8 @@ def monitor_file(sio_server, sid, host, filename):
         if not line or line == '':
             break
         num_lines += 1
-        sio_server.emit('file-line', line, room=sid)
+        sio_server.emit('file-line', line.decode('utf-8', 'ignore'), room=sid)
+
     if num_lines:
         sio_server.emit('file-line', '[end of file - program exited]', room=sid)
     else:
