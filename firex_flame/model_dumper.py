@@ -134,7 +134,8 @@ class FlameModelDumper:
             # Note that since a flame can terminate (e.g. via timeout) before a run, there is no guarantee
             # that the run_metadata model file will ever have root_complete: true.
             root_complete = tasks_by_uuid.get(root_uuid, {'state': None})['state'] in COMPLETE_STATES
-            metadata_model_file = self.dump_metadata(run_metadata, root_complete, flame_complete=True)
+            run_metadata_with_root = {**run_metadata, 'root_uuid': root_uuid}
+            metadata_model_file = self.dump_metadata(run_metadata_with_root, root_complete, flame_complete=True)
             paths_to_compress.append(metadata_model_file)
 
         # Write a tar.gz file containing all the files dumped above.

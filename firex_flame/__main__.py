@@ -93,6 +93,7 @@ def _create_run_metadata(cli_args):
         'central_documentation_url': cli_args.central_documentation_url,
         'flame_url': get_flame_url(cli_args.port),
         'firex_bin': cli_args.firex_bin_path,
+        'root_uuid': None,
     }
 
 
