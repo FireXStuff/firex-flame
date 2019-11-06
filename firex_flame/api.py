@@ -11,7 +11,7 @@ from firex_flame.flame_helper import wait_until
 from firex_flame.event_aggregator import slim_tasks_by_uuid, INCOMPLETE_STATES
 
 from eventlet import spawn
-from eventlet.green import subprocess
+from eventlet.green import subprocess, select
 
 logger = logging.getLogger(__name__)
 
@@ -33,33 +33,68 @@ def _get_task_fields(tasks_by_uuid, fields):
             for uuid, task in tasks_by_uuid.items()}
 
 
+def poll_fd_readable(fd, timeout=0):
+    readable, _, _ = select.select([fd], [], [], timeout)
+    return readable
+
+
 def monitor_file(sio_server, sid, host, filename):
+    # To avoid issues with huge log files, we only get the last 50000 lines
+    max_lines = 50000
+
     # spawn ssh to host to tail -f the file - output to be sent to requesting client
     logger.info("Will start monitoring file %s on host %s" % (filename, host))
     # noinspection PyBroadException
     try:
         # noinspection PyUnresolvedReferences
-        p = subprocess.Popen(["/bin/ssh", "-t", "-t", host,
-                              "/usr/bin/tail -n +1 --follow=name %s 2>/dev/null" % filename],
-                             bufsize=1, stdout=subprocess.PIPE)
+        with subprocess.Popen(["/bin/ssh", "-C", "-t", "-t", host,
+                              "/usr/bin/tail -n %d --follow=name %s 2>/dev/null" % (max_lines, filename)],
+                              bufsize=0, stdout=subprocess.PIPE) as p:
+            # Keep track of all spawned processes to be able to manage them later
+            subprocess_dict[sid] = p
+
+            # Wait up to 60s for data to start streaming in
+            poll_fd_readable(p.stdout, 60)
+
+            # Gather up the first bunch of log file data that comes in rapidly and it to the UI in one batch
+            lines = []
+            while poll_fd_readable(p.stdout, 5):
+                try:
+                    line = p.stdout.readline()
+                    lines.append(line.decode('utf-8', 'ignore'))
+                except Exception as e:
+                    sio_server.emit('file-line', "Unoh exception", room=sid)
+                    logger.warning("Exception raised while trying to monitor file:", exc_info=True)
+                    return
+            if len(lines):
+                if len(lines) >= max_lines:
+                    lines.insert(0, "[Showing only last %d lines]\n" % max_lines)
+                else:
+                    lines.insert(0, "[Beginning of file]\n")
+                sio_server.emit('file-head', {'data': lines}, room=sid)
+
+            # Now keep up with the 'live' incoming trickle of data
+            num_lines = len(lines)
+            while True:
+                try:
+                    line = p.stdout.readline()
+                    if not line or line == '':
+                        break
+                    sio_server.emit('file-line', line.decode('utf-8', 'ignore'), room=sid)
+                    num_lines += 1
+                except Exception as e:
+                    logger.warning("Exception raised while trying to monitor file:", exc_info=True)
+                    return
+
+            if num_lines:
+                sio_server.emit('file-line', '[end of file - program exited]\n', room=sid)
+            else:
+                sio_server.emit('file-line', '[temporary file no longer exists because command has completed]\n',
+                                room=sid)
+
     except Exception:
-        sio_server.emit('file-line', "Spawned subprocess to monitor file failed to start.", room=sid)
+        sio_server.emit('file-line', "Spawned subprocess to monitor file failed.\n", room=sid)
         return
-
-    # Keep track of all spawned processes to be able to manage them later
-    subprocess_dict[sid] = p
-
-    num_lines = 0
-    for line in iter(p.stdout.readline, ''):
-        if not line or line == '':
-            break
-        num_lines += 1
-        sio_server.emit('file-line', line.decode('utf-8', 'ignore'), room=sid)
-
-    if num_lines:
-        sio_server.emit('file-line', '[end of file - program exited]', room=sid)
-    else:
-        sio_server.emit('file-line', '[temporary file no longer exists since command has completed]', room=sid)
 
 
 def term_subproc(sid):

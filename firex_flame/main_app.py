@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 def run_flame(broker_consumer_config, web_port, run_metadata, recording_file):
     web_app = create_web_app(run_metadata)
-    sio_server = socketio.Server()
+    sio_server = socketio.Server(cors_allowed_origins='*')
     sio_web_app = socketio.Middleware(sio_server, web_app)
 
     event_aggregator = FlameEventAggregator()
