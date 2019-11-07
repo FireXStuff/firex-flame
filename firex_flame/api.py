@@ -48,7 +48,9 @@ def monitor_file(sio_server, sid, host, filename):
     try:
         # noinspection PyUnresolvedReferences
         with subprocess.Popen(["/bin/ssh", "-C", "-t", "-t", host,
-                              "/usr/bin/tail -n %d --follow=name %s 2>/dev/null" % (max_lines, filename)],
+                               """[ "$(/bin/find %s -perm -004)" ] && """
+                               """/usr/bin/tail -n %d --follow=name %s 2>/dev/null || """
+                               """echo "Access denied." """ % (filename, max_lines, filename)],
                               bufsize=0, stdout=subprocess.PIPE) as p:
             # Keep track of all spawned processes to be able to manage them later
             subprocess_dict[sid] = p
@@ -61,20 +63,22 @@ def monitor_file(sio_server, sid, host, filename):
             while poll_fd_readable(p.stdout, 5):
                 try:
                     line = p.stdout.readline()
+                    if not line or line == '':
+                        break
                     lines.append(line.decode('utf-8', 'ignore'))
-                except Exception as e:
-                    sio_server.emit('file-line', "Unoh exception", room=sid)
+                except Exception:
                     logger.warning("Exception raised while trying to monitor file:", exc_info=True)
                     return
-            if len(lines):
-                if len(lines) >= max_lines:
+            num_lines = len(lines)
+            if num_lines:
+                if num_lines >= max_lines:
                     lines.insert(0, "[Showing only last %d lines]\n" % max_lines)
                 else:
-                    lines.insert(0, "[Beginning of file]\n")
+                    if num_lines != 1 or lines[0] == "Access denied.":
+                        lines.insert(0, "[Beginning of file]\n")
                 sio_server.emit('file-head', {'data': lines}, room=sid)
 
             # Now keep up with the 'live' incoming trickle of data
-            num_lines = len(lines)
             while True:
                 try:
                     line = p.stdout.readline()
@@ -87,7 +91,8 @@ def monitor_file(sio_server, sid, host, filename):
                     return
 
             if num_lines:
-                sio_server.emit('file-line', '[end of file - program exited]\n', room=sid)
+                if num_lines != 1 or lines[0] == "Access denied.":
+                    sio_server.emit('file-line', '[end of file - program exited]\n', room=sid)
             else:
                 sio_server.emit('file-line', '[temporary file no longer exists because command has completed]\n',
                                 room=sid)
