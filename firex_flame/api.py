@@ -38,9 +38,14 @@ def poll_fd_readable(fd, timeout=0):
     return readable
 
 
+
 def monitor_file(sio_server, sid, host, filename):
     # To avoid issues with huge log files, we only get the last 50000 lines
     max_lines = 50000
+
+    # helper to send data
+    def emit_line_data(lines):
+        sio_server.emit('file-data', {'data': lines}, room=sid)
 
     # spawn ssh to host to tail -f the file - output to be sent to requesting client
     logger.info("Will start monitoring file %s on host %s" % (filename, host))
@@ -74,31 +79,41 @@ def monitor_file(sio_server, sid, host, filename):
                 if num_lines >= max_lines:
                     lines.insert(0, "[Showing only last %d lines]\n" % max_lines)
                 else:
-                    if num_lines != 1 or lines[0] == "Access denied.":
+                    if num_lines == 1 and lines[0].startswith("Access denied."):
+                        emit_line_data(["File access permissions prevent viewing of file.\n"])
+                        return
+                    else:
                         lines.insert(0, "[Beginning of file]\n")
-                sio_server.emit('file-head', {'data': lines}, room=sid)
+                emit_line_data(lines)
 
             # Now keep up with the 'live' incoming trickle of data
-            while True:
+            done = False
+            while not done:
+                lines = []
                 try:
-                    line = p.stdout.readline()
-                    if not line or line == '':
-                        break
-                    sio_server.emit('file-line', line.decode('utf-8', 'ignore'), room=sid)
-                    num_lines += 1
-                except Exception as e:
+                    # Looping check for data - might get multiple lines in a chunk
+                    while poll_fd_readable(p.stdout, 1):
+                        line = p.stdout.readline()
+                        if not line or line == '':
+                            done = True
+                            break
+                        lines.append(line.decode('utf-8', 'ignore'))
+                    # if we got lines, send them off to the ui
+                    if len(lines):
+                        emit_line_data(lines)
+                        num_lines += len(lines)
+                except Exception:
                     logger.warning("Exception raised while trying to monitor file:", exc_info=True)
                     return
 
             if num_lines:
-                if num_lines != 1 or lines[0] == "Access denied.":
-                    sio_server.emit('file-line', '[end of file - program exited]\n', room=sid)
+                emit_line_data(['[end of file - program exited]\n'])
             else:
-                sio_server.emit('file-line', '[temporary file no longer exists because command has completed]\n',
-                                room=sid)
+                emit_line_data(['[temporary file no longer exists because command has completed]\n'])
 
-    except Exception:
-        sio_server.emit('file-line', "Spawned subprocess to monitor file failed.\n", room=sid)
+    except Exception as e:
+        emit_line_data(["Spawned subprocess to monitor file failed:\n"])
+        emit_line_data([str(e)])
         return
 
 
