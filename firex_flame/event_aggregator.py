@@ -89,7 +89,8 @@ FIELD_CONFIG = {
         # Note first_started is never overwritten by aggregation.
         'transform_celery': lambda e: {'first_started': e['local_received']},
     },
-    'states': {'aggregate_merge': True}
+    'states': {'aggregate_merge': True},
+    'exception_cause_uuid': {'copy_celery': True}
 }
 
 
