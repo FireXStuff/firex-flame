@@ -38,14 +38,13 @@ def poll_fd_readable(fd, timeout=0):
     return readable
 
 
-
 def monitor_file(sio_server, sid, host, filename):
     # To avoid issues with huge log files, we only get the last 50000 lines
     max_lines = 50000
 
     # helper to send data
-    def emit_line_data(lines):
-        sio_server.emit('file-data', {'data': lines}, room=sid)
+    def emit_line_data(data):
+        sio_server.emit('file-data', data, room=sid)
 
     # spawn ssh to host to tail -f the file - output to be sent to requesting client
     logger.info("Will start monitoring file %s on host %s" % (filename, host))
@@ -53,10 +52,10 @@ def monitor_file(sio_server, sid, host, filename):
     try:
         # noinspection PyUnresolvedReferences
         with subprocess.Popen(["/bin/ssh", "-C", "-t", "-t", host,
-                               """[ "$(/bin/find %s -perm -004)" ] && """
+                               """bash -c '[ "$(/bin/find %s -perm -004)" ] && """
                                """/usr/bin/tail -n %d --follow=name %s 2>/dev/null || """
-                               """echo "Access denied." """ % (filename, max_lines, filename)],
-                              bufsize=0, stdout=subprocess.PIPE) as p:
+                               """echo "Access denied."' """ % (filename, max_lines, filename)],
+                              bufsize=128, stdout=subprocess.PIPE) as p:
             # Keep track of all spawned processes to be able to manage them later
             subprocess_dict[sid] = p
 
@@ -64,55 +63,58 @@ def monitor_file(sio_server, sid, host, filename):
             poll_fd_readable(p.stdout, 60)
 
             # Gather up the first bunch of log file data that comes in rapidly and it to the UI in one batch
-            lines = []
-            while poll_fd_readable(p.stdout, 5):
+            chunk = ''
+            total_num_lines = 0
+            while poll_fd_readable(p.stdout, 1):
                 try:
                     line = p.stdout.readline()
+                    total_num_lines += 1
                     if not line or line == '':
                         break
-                    lines.append(line.decode('utf-8', 'ignore'))
+                    chunk += line.decode('utf-8', 'ignore')
                 except Exception:
                     logger.warning("Exception raised while trying to monitor file:", exc_info=True)
                     return
-            num_lines = len(lines)
-            if num_lines:
-                if num_lines >= max_lines:
-                    lines.insert(0, "[Showing only last %d lines]\n" % max_lines)
+            if total_num_lines:
+                if total_num_lines >= max_lines:
+                    chunk = "[Showing only last %d lines]\n" % max_lines + chunk
                 else:
-                    if num_lines == 1 and lines[0].startswith("Access denied."):
-                        emit_line_data(["File access permissions prevent viewing of file.\n"])
+                    if total_num_lines == 1 and chunk.startswith("Access denied."):
+                        emit_line_data("File access permissions prevent viewing of file.\n")
                         return
                     else:
-                        lines.insert(0, "[Beginning of file]\n")
-                emit_line_data(lines)
+                        chunk = "[Beginning of file]\n" + chunk
+                emit_line_data(chunk)
 
             # Now keep up with the 'live' incoming trickle of data
             done = False
             while not done:
-                lines = []
+                chunk = ''
+                num_lines = 0
                 try:
                     # Looping check for data - might get multiple lines in a chunk
                     while poll_fd_readable(p.stdout, 1):
                         line = p.stdout.readline()
+                        num_lines += 1
                         if not line or line == '':
                             done = True
                             break
-                        lines.append(line.decode('utf-8', 'ignore'))
+                        chunk += line.decode('utf-8', 'ignore')
                     # if we got lines, send them off to the ui
-                    if len(lines):
-                        emit_line_data(lines)
-                        num_lines += len(lines)
+                    if num_lines:
+                        emit_line_data(chunk)
+                        total_num_lines += num_lines
                 except Exception:
                     logger.warning("Exception raised while trying to monitor file:", exc_info=True)
                     return
 
-            if num_lines:
-                emit_line_data(['[end of file - program exited]\n'])
+            if total_num_lines:
+                emit_line_data('[end of file - program exited]\n')
             else:
-                emit_line_data(['[temporary file no longer exists because command has completed]\n'])
+                emit_line_data('[temporary file no longer exists because command has completed]\n')
 
     except Exception as e:
-        emit_line_data(["Spawned subprocess to monitor file failed:\n"])
+        emit_line_data("Spawned subprocess to monitor file failed:\n")
         emit_line_data([str(e)])
         return
 
