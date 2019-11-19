@@ -90,7 +90,11 @@ FIELD_CONFIG = {
         'transform_celery': lambda e: {'first_started': e['local_received']},
     },
     'states': {'aggregate_merge': True},
-    'exception_cause_uuid': {'copy_celery': True}
+    'exception_cause_uuid': {'copy_celery': True},
+    'external_commands': {
+        'copy_celery': True,
+        'aggregate_merge': True,
+    },
 }
 
 
