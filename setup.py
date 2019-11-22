@@ -26,6 +26,7 @@ setup(name='firex_flame',
             "requests",
             "beautifulsoup4",
             "importlib_resources",
+            "paramiko",
       ],
       package_data={
         'firex_flame': ['templates/*.html'],

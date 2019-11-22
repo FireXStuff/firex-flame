@@ -10,8 +10,9 @@ from firex_flame.flame_helper import wait_until
 
 from firex_flame.event_aggregator import slim_tasks_by_uuid, INCOMPLETE_STATES
 
-from eventlet import spawn
-from eventlet.green import subprocess, select
+from eventlet import spawn, sleep
+
+import paramiko
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +34,15 @@ def _get_task_fields(tasks_by_uuid, fields):
             for uuid, task in tasks_by_uuid.items()}
 
 
-def poll_fd_readable(fd, timeout=0):
-    readable, _, _ = select.select([fd], [], [], timeout)
-    return readable
+def poll_channel_readable(channel, timeout=0):
+    interval = 0.1
+    so_far = 0
+    while so_far <= timeout:
+        if channel.recv_ready():
+            return True
+        sleep(interval)
+        so_far += interval
+    return False
 
 
 def monitor_file(sio_server, sid, host, filename):
@@ -50,73 +57,90 @@ def monitor_file(sio_server, sid, host, filename):
     logger.info("Will start monitoring file %s on host %s" % (filename, host))
     # noinspection PyBroadException
     try:
-        # noinspection PyUnresolvedReferences
-        with subprocess.Popen(["/bin/ssh", "-C", "-t", "-t", host,
-                               """bash -c '[ "$(/bin/find %s -perm -004)" ] && """
-                               """/usr/bin/tail -n %d --follow=name %s 2>/dev/null || """
-                               """echo "Access denied."' """ % (filename, max_lines, filename)],
-                              bufsize=128, stdout=subprocess.PIPE) as p:
-            # Keep track of all spawned processes to be able to manage them later
-            subprocess_dict[sid] = p
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(host, 22, timeout=60, compress=True)
 
-            # Wait up to 60s for data to start streaming in
-            poll_fd_readable(p.stdout, 60)
+        # Run find to locate file and match perms
+        _, stdout, stderr = ssh.exec_command("/bin/find %s -perm -004" % filename)
+        # Wait for command to return
+        stdout.channel.recv_exit_status()
 
-            # Gather up the first bunch of log file data that comes in rapidly and it to the UI in one batch
-            chunk = ''
-            total_num_lines = 0
-            while poll_fd_readable(p.stdout, 1):
-                try:
-                    line = p.stdout.readline()
-                    total_num_lines += 1
-                    if not line or line == '':
-                        break
-                    chunk += line.decode('utf-8', 'ignore')
-                except Exception:
-                    logger.warning("Exception raised while trying to monitor file:", exc_info=True)
-                    return
-            if total_num_lines:
-                if total_num_lines >= max_lines:
-                    chunk = "[Showing only last %d lines]\n" % max_lines + chunk
-                else:
-                    if total_num_lines == 1 and chunk.startswith("Access denied."):
-                        emit_line_data("File access permissions prevent viewing of file.\n")
-                        return
-                    else:
-                        chunk = "[Beginning of file]\n" + chunk
-                emit_line_data(chunk)
+        # Read command stdout/err
+        res_out = stdout.read()
+        res_err = stderr.read()
 
-            # Now keep up with the 'live' incoming trickle of data
-            done = False
-            while not done:
-                chunk = ''
-                num_lines = 0
-                try:
-                    # Looping check for data - might get multiple lines in a chunk
-                    while poll_fd_readable(p.stdout, 1):
-                        line = p.stdout.readline()
-                        num_lines += 1
-                        if not line or line == '':
-                            done = True
-                            break
-                        chunk += line.decode('utf-8', 'ignore')
-                    # if we got lines, send them off to the ui
-                    if num_lines:
-                        emit_line_data(chunk)
-                        total_num_lines += num_lines
-                except Exception:
-                    logger.warning("Exception raised while trying to monitor file:", exc_info=True)
-                    return
-
-            if total_num_lines:
-                emit_line_data('[end of file - program exited]\n')
+        # Check our results
+        if not res_out or res_out == b'':
+            if not res_err or res_err == b'':
+                emit_line_data("ERROR: File access permissions prevent viewing of file.\n")
             else:
-                emit_line_data('[temporary file no longer exists because command has completed]\n')
+                res_err = res_err.decode('utf-8', 'ignore')
+                if "No such file or directory" in res_err:
+                    # File no longer exists on remote host
+                    emit_line_data('[Temporary file no longer exists - executed command has completed]\n')
+                else:
+                    emit_line_data("ERROR: Unexpected error while checking file existence and permissions: %s" % res_err)
+            return
+        else:
+            res_out = res_out.decode('utf-8', 'ignore')
+            if filename not in res_out:
+                emit_line_data("ERROR: Unexpected output while checking file existence and permissions: %s" % res_out)
+                return
+
+        try:
+            # File exists and has open permissions - tail it
+            _, stdout, _ = ssh.exec_command("/usr/bin/tail -n %d --follow=name %s 2>/dev/null" %
+                                                 (max_lines, filename), bufsize=128, get_pty=True)
+
+            # Keep track of all spawned processes to be able to manage them later
+            subprocess_dict[sid] = ssh
+
+            # Set read timeout to 1s
+            stdout.channel.settimeout(1)
+
+            # local helper function
+            def get_data_chunk():
+                from socket import timeout
+                data_chunk = ''
+                max_chunk_lines = 10000
+                num_chunk_lines = 0
+                end_of_file = False
+                while num_chunk_lines < max_chunk_lines:
+                    try:
+                        line = stdout.readline()
+                        if not line or line == '':
+                            # empty line signifies eof
+                            end_of_file = True
+                            break
+                    except timeout:
+                        # No more data available within timeout: consider this a full data_chunk to be sent off
+                        break
+                    else:
+                        data_chunk += line
+                        num_chunk_lines += 1
+                return data_chunk, num_chunk_lines, end_of_file
+
+            total_num_lines = 0
+            eof = False
+            while not eof:
+                chunk, num_lines, eof = get_data_chunk()
+                if num_lines:
+                    if not total_num_lines:
+                        chunk = "[start of data received]\n" + chunk
+                    emit_line_data(chunk)
+                    total_num_lines += num_lines
+
+            if total_num_lines:
+                emit_line_data('[End of file - program exited]\n')
+                return
+
+        except Exception:
+            logger.warning("Exception raised while trying to spawn subprocess to monitor file: ", exc_info=True)
 
     except Exception as e:
-        emit_line_data("Spawned subprocess to monitor file failed:\n")
+        emit_line_data("ERROR: Spawned subprocess to monitor file failed:\n")
         emit_line_data([str(e)])
-        return
 
 
 def term_subproc(sid):
