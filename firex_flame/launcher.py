@@ -8,13 +8,13 @@ from firexapp.submit.tracking_service import TrackingService
 from firexapp.submit.console import setup_console_logging
 
 from firex_flame.flame_helper import DEFAULT_FLAME_TIMEOUT, get_flame_debug_dir, \
-    get_rec_file, get_flame_url, get_old_rec_file, web_request_ok
-from firex_flame.model_dumper import is_dump_complete
+    get_rec_file, web_request_ok
+from firex_flame.model_dumper import is_dump_complete, get_flame_url
 
 logger = setup_console_logging(__name__)
 
 
-def get_flame_args(port, uid, broker_recv_ready_file, args):
+def get_flame_args(uid, broker_recv_ready_file, args):
     if args.flame_record:
         rec_file = args.flame_record
     else:
@@ -22,7 +22,7 @@ def get_flame_args(port, uid, broker_recv_ready_file, args):
 
     # assemble startup cmd
     cmd_args = {
-        'port': port,
+        'port': args.flame_port,
         'broker': BrokerFactory.get_broker_url(),
         'uid': str(uid),
         'logs_dir': uid.logs_dir,
@@ -57,10 +57,10 @@ def url_join(host, start_path, end_path):
 class FlameLauncher(TrackingService):
 
     def __init__(self):
-        self.flame_url = None
         self.broker_recv_ready_file = None
         self.sync = None
         self.firex_logs_dir = None
+        self.is_ready_for_tasks = False
 
     def extra_cli_arguments(self, arg_parser):
         arg_parser.add_argument('--flame_timeout', help='How long the webserver should run for, in seconds.',
@@ -89,20 +89,18 @@ class FlameLauncher(TrackingService):
                                 default=None)
         arg_parser.add_argument('--flame_port',
                                 help='Flame port to be used', type=int,
-                                default=None)
+                                default=0)
         arg_parser.add_argument('--flame_terminate_on_complete',
                                 help='Terminate Flame when run completes. Ignores timeout arg entirely.',
                                 default=None, const=True, nargs='?')
 
-    def start(self, args, uid=None, **kwargs)->{}:
-        port = int(args.flame_port) if args.flame_port else get_available_port()
+    def start(self, args, uid=None, **kwargs) -> dict:
         self.broker_recv_ready_file = os.path.join(get_flame_debug_dir(uid.logs_dir), 'celery_receiver_ready')
         self.sync = args.sync
         self.firex_logs_dir = uid.logs_dir
 
-        flame_args = get_flame_args(port, uid, self.broker_recv_ready_file, args)
+        flame_args = get_flame_args(uid, self.broker_recv_ready_file, args)
 
-        # start the flame service and return the port
         try:
             subprocess.Popen([qualify_firex_bin("firex_flame")] + flame_args,
                              stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT,              
@@ -111,21 +109,23 @@ class FlameLauncher(TrackingService):
             logger.error("Flame subprocess start failed: %s." % e)
             raise
 
-        self.flame_url = get_flame_url(port)
-
-        if args.flame_central_server and args.flame_central_server_ui_path:
-            display_url = url_join(args.flame_central_server, args.flame_central_server_ui_path, str(uid))
-        else:
-            display_url = self.flame_url
-
-        logger.info('Flame: %s' % display_url)
-        return {"flame_port": port}
+        return {}
 
     def ready_for_tasks(self, **kwargs) -> bool:
-        webserver_alive = web_request_ok(urllib.parse.urljoin(self.flame_url, '/alive'))
-        broker_recv_ready = os.path.isfile(self.broker_recv_ready_file)
+        if self.is_ready_for_tasks:
+            return True
 
-        return webserver_alive and broker_recv_ready
+        flame_url = get_flame_url(firex_logs_dir=self.firex_logs_dir)
+        if flame_url is not None:
+            webserver_alive = web_request_ok(urllib.parse.urljoin(flame_url, '/alive'))
+            broker_recv_ready = os.path.isfile(self.broker_recv_ready_file)
+            self.is_ready_for_tasks = webserver_alive and broker_recv_ready
+
+            if self.is_ready_for_tasks:
+                # This will only be printed once due to initial guard.
+                logger.info('Flame: %s' % flame_url)
+
+        return self.is_ready_for_tasks
 
     def ready_release_console(self, **kwargs) -> bool:
         if self.sync:

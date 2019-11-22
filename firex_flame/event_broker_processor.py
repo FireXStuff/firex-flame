@@ -79,7 +79,6 @@ class BrokerEventConsumerThread(threading.Thread):
                 stop_main_thread("Terminating on completion, as requested by input args.")
 
     def _run_from_broker(self):
-        self.flame_controller.dump_initial_metadata()
         """Load the events from celery"""
         try:
             self._capture_events()

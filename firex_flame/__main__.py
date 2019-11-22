@@ -17,7 +17,7 @@ eventlet.monkey_patch()
 
 def _parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--port', help='Port for starting the web server on', type=int, default=8000)
+    parser.add_argument('--port', help='Port for starting the web server on', type=int, default=0)
     parser.add_argument('--uid', help='Unique identifier for the represented FireX run.')
     parser.add_argument('--logs_dir', help='Logs directory.', default=None, required=True)
     parser.add_argument('--chain', help='Chain of the run.', default=None)
@@ -82,7 +82,7 @@ def _config_logging(root_logs_dir):
     logging.getLogger('engineio.server').setLevel(logging.WARNING)
 
 
-def _create_run_metadata(cli_args):
+def _create_run_metadata(cli_args, bound_port):
     return {
         'uid': cli_args.uid,
         'logs_dir': cli_args.logs_dir,
@@ -91,7 +91,7 @@ def _create_run_metadata(cli_args):
         'chain': cli_args.chain,
         'logs_server': cli_args.logs_server,
         'central_documentation_url': cli_args.central_documentation_url,
-        'flame_url': get_flame_url(cli_args.port),
+        'flame_url': get_flame_url(bound_port),
         'firex_bin': cli_args.firex_bin_path,
         'root_uuid': None,
     }
@@ -112,6 +112,19 @@ class NoopTimer:
         pass
 
 
+def _run_from_args(args):
+    logger.info('Starting Flame Server with args: %s' % args)
+
+    socket = eventlet.listen(('', args.port))
+    bound_webapp_port = socket.getsockname()[1]
+    logger.info('Bound to webapp port: %s' % bound_webapp_port)
+
+    run_flame(create_broker_processor_config(args),
+              socket,
+              _create_run_metadata(args, bound_webapp_port),
+              args.recording)
+
+
 def main():
     signal.signal(signal.SIGTERM, _sigterm_handler)
     signal.signal(signal.SIGINT, _sigint_handler)
@@ -121,11 +134,7 @@ def main():
     t = NoopTimer() if args.terminate_on_complete else Timer(args.flame_timeout, _exit_on_timeout)
     try:
         t.start()
-        logger.info('Starting Flame Server with args: %s' % args)
-        run_flame(create_broker_processor_config(args),
-                  args.port,
-                  _create_run_metadata(args),
-                  args.recording)
+        _run_from_args(args)
         t.cancel()
     except Exception as e:
         logger.exception(e)

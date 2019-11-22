@@ -21,14 +21,7 @@ from firex_flame.flame_helper import get_flame_pid, wait_until_pid_not_exist, wa
     kill_flame, kill_and_wait, json_file_fn
 from firex_flame.event_aggregator import INCOMPLETE_STATES, COMPLETE_STATES
 from firex_flame.model_dumper import get_tasks_slim_file, get_model_full_tasks_by_names, is_dump_complete, \
-    get_run_metadata_file
-
-
-def flame_url_from_output(cmd_output):
-    m = re.search(r'Flame: (http://.*)\n', cmd_output)
-    if m:
-        return m.group(1)
-    return None
+    get_run_metadata_file, get_flame_url
 
 
 class FlameFlowTestConfiguration(FlowTestConfiguration):
@@ -36,8 +29,8 @@ class FlameFlowTestConfiguration(FlowTestConfiguration):
 
     def assert_expected_firex_output(self, cmd_output, cmd_err):
         log_dir = get_log_dir_from_output(cmd_output)
-        flame_url = flame_url_from_output(cmd_output)
-        assert flame_url, "Found no Flame URL in cmd_output"
+        flame_url = wait_until(get_flame_url, 10, 0.5, firex_logs_dir=log_dir)
+        assert flame_url, "Found no Flame URL in logs_dir"
         try:
             self.assert_on_flame_url(log_dir, flame_url)
         finally:

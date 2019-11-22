@@ -31,8 +31,9 @@ def get_flame_pid(root_logs_dir):
 def wait_until(predicate, timeout, sleep_for, *args, **kwargs):
     max_time = time.time() + timeout
     while time.time() < max_time:
-        if predicate(*args, **kwargs):
-            return True
+        pred_result = predicate(*args, **kwargs)
+        if pred_result:
+            return pred_result
         time.sleep(sleep_for)
     return predicate(*args, **kwargs)
 

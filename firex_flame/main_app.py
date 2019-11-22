@@ -16,7 +16,7 @@ from firex_flame.web_app import create_web_app
 logger = logging.getLogger(__name__)
 
 
-def run_flame(broker_consumer_config, web_port, run_metadata, recording_file):
+def run_flame(broker_consumer_config, webapp_socket, run_metadata, recording_file):
     web_app = create_web_app(run_metadata)
     sio_server = socketio.Server(cors_allowed_origins='*')
     sio_web_app = socketio.Middleware(sio_server, web_app)
@@ -26,8 +26,9 @@ def run_flame(broker_consumer_config, web_port, run_metadata, recording_file):
         event_recv_thread = Thread(target=process_recording_file, args=(event_aggregator, recording_file, run_metadata))
     else:
         assert broker_consumer_config.broker_url, "Since recording file doesn't exist, the broker is required."
-        celery_app = celery.Celery(broker=broker_consumer_config.broker_url)
         controller = FlameAppController(sio_server, run_metadata)
+        controller.dump_initial_metadata()
+        celery_app = celery.Celery(broker=broker_consumer_config.broker_url)
         event_recv_thread = BrokerEventConsumerThread(celery_app,
                                                       controller,
                                                       event_aggregator,
@@ -41,8 +42,10 @@ def run_flame(broker_consumer_config, web_port, run_metadata, recording_file):
     event_recv_thread.start()
 
     try:
-        eventlet.wsgi.server(eventlet.listen(('', web_port)), sio_web_app)
+        eventlet.wsgi.server(webapp_socket, sio_web_app)
     except KeyboardInterrupt:
         logger.info('KeyboardInterrupt - Shutting down')
+    finally:
+        webapp_socket.close()
 
     term_all_subprocs()
