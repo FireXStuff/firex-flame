@@ -119,6 +119,7 @@ def create_ui_config(run_metadata):
             "url_format": None,
         },
         'rel_completion_report_path': REL_COMPLETION_REPORT_PATH,
+        "linkify_prefixes": ["/auto/", "/ws/"],
     }
 
 
