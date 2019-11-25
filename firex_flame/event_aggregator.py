@@ -44,7 +44,6 @@ FIELD_CONFIG = {
     },
     'retries': {'copy_celery': True, 'slim_field': True},
     TASK_ARGS: {'copy_celery': True},
-    'flame_additional_data': {'copy_celery': True, 'slim_field': True},
     'actual_runtime': {'copy_celery': True, 'slim_field': True},
     'support_location': {'copy_celery': True},
     'utcoffset': {'copy_celery': True},
