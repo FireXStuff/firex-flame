@@ -108,7 +108,6 @@ def create_ui_config(run_metadata):
         # Tells UI to fetch task data from the origin via Flame's socketio API.
         "access_mode": 'socketio-origin',
         "model_path_template": None,
-        "redirect_to_alive_flame": False,
         "is_central": False,
         "central_server": run_metadata['central_server'],
         "central_server_ui_path": run_metadata['central_server_ui_path'],

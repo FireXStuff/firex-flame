@@ -9,7 +9,7 @@ import eventlet
 from firex_flame.api import create_socketio_task_api, create_revoke_api, create_rest_task_api, term_all_subprocs
 from firex_flame.controller import FlameAppController
 from firex_flame.event_file_processor import process_recording_file
-from firex_flame.event_broker_processor import BrokerEventConsumerThread, BrokerConsumerConfig
+from firex_flame.event_broker_processor import BrokerEventConsumerThread
 from firex_flame.event_aggregator import FlameEventAggregator
 from firex_flame.web_app import create_web_app
 
@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 def run_flame(broker_consumer_config, webapp_socket, run_metadata, recording_file):
     web_app = create_web_app(run_metadata)
+    # TODO: parametrize cors_allowed_origins.
     sio_server = socketio.Server(cors_allowed_origins='*')
     sio_web_app = socketio.Middleware(sio_server, web_app)
 
@@ -47,5 +48,4 @@ def run_flame(broker_consumer_config, webapp_socket, run_metadata, recording_fil
         logger.info('KeyboardInterrupt - Shutting down')
     finally:
         webapp_socket.close()
-
-    term_all_subprocs()
+        term_all_subprocs()
