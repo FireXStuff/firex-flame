@@ -80,7 +80,8 @@ def monitor_file(sio_server, sid, host, filename):
                     # File no longer exists on remote host
                     emit_line_data('[Temporary file no longer exists - executed command has completed]\n')
                 else:
-                    emit_line_data("ERROR: Unexpected error while checking file existence and permissions: %s" % res_err)
+                    emit_line_data("ERROR: Unexpected error while checking file existence and permissions: %s" %
+                                   res_err)
             return
         else:
             res_out = res_out.decode('utf-8', 'ignore')
@@ -90,8 +91,8 @@ def monitor_file(sio_server, sid, host, filename):
 
         try:
             # File exists and has open permissions - tail it
-            _, stdout, _ = ssh.exec_command("/usr/bin/tail -n %d --follow=name %s 2>/dev/null" %
-                                                 (max_lines, filename), bufsize=128, get_pty=True)
+            _, stdout, _ = ssh.exec_command("""/bin/bash -c "'/usr/bin/tail -n %d --follow=name %s 2>/dev/null'" """ %
+                                            (max_lines, filename), bufsize=128, get_pty=True)
 
             # Keep track of all spawned processes to be able to manage them later
             subprocess_dict[sid] = ssh
