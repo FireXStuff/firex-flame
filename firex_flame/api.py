@@ -91,7 +91,7 @@ def monitor_file(sio_server, sid, host, filename):
 
         try:
             # File exists and has open permissions - tail it
-            _, stdout, _ = ssh.exec_command("""/bin/bash -c "'/usr/bin/tail -n %d --follow=name %s 2>/dev/null'" """ %
+            _, stdout, _ = ssh.exec_command("""/bin/bash -c '/usr/bin/tail -n %d --follow=name %s 2>/dev/null' """ %
                                             (max_lines, filename), bufsize=128, get_pty=True)
 
             # Keep track of all spawned processes to be able to manage them later
