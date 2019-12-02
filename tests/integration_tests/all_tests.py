@@ -7,7 +7,7 @@ import signal
 import time
 import requests
 import urllib.parse
-import tempfile
+
 
 from bs4 import BeautifulSoup
 import socketio
@@ -134,7 +134,7 @@ class FlameSigtermShutdownTest(FlameFlowTestConfiguration):
     """ Flame shutsdown cleanly when getting a sigterm."""
 
     def initial_firex_options(self) -> list:
-        return ["submit", "--chain", 'sleep', '--sleep', '60']
+        return ["submit", "--chain", 'nop']
 
     def assert_on_flame_url(self, log_dir, flame_url):
         flame_pid = get_flame_pid(log_dir)
@@ -147,7 +147,7 @@ class FlameSigintShutdownTest(FlameFlowTestConfiguration):
     """ Flame shutsdown cleanly when getting a sigint."""
 
     def initial_firex_options(self) -> list:
-        return ["submit", "--chain", 'sleep', '--sleep', '60']
+        return ["submit", "--chain", 'nop']
 
     def assert_on_flame_url(self, log_dir, flame_url):
         flame_pid = get_flame_pid(log_dir)
@@ -371,69 +371,3 @@ class DumpDataOnCompleteTest(FlameFlowTestConfiguration):
         found_paths = filter_paths(tasks_by_name, query)['add']
         print(found_paths)
         assert len(found_paths) == 1
-
-
-class FlameLiveMonitorFile(FlameFlowTestConfiguration):
-    """ Uses Flame's SocketIO API to revoke a run. """
-
-    # Don't run with --sync, since this test needs the flame server up.
-    sync = False
-    no_coverage = True
-
-    def initial_firex_options(self) -> list:
-        # Sleep so that assert_on_flame_url can call live monitor APIs.
-        return ["submit", "--chain", 'sleep', '--sleep', '120']
-
-    def assert_on_flame_url(self, log_dir, flame_url):
-        sleep_exists = wait_until_task_name_exists_in_rec(log_dir, 'sleep')
-        assert sleep_exists, "Sleep task doesn't exist in the flame rec file, something is wrong with run."
-
-        with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
-            # Open file permissions so flame will allow live file viewing.
-            from stat import S_IRUSR, S_IRGRP, S_IROTH
-            os.chmod(f.name, S_IRUSR | S_IRGRP | S_IROTH)
-
-            initial_content = '1 2\n'
-            f.write(initial_content)
-            f.flush()
-
-            sio_client = socketio.Client()
-
-            container = {'content': ''}
-
-            @sio_client.on('file-data')
-            def get_file_line(chunk):
-                container['content'] += chunk
-
-            try:
-                sio_client.connect(flame_url)
-                sio_client.emit('start-listen-file', data={'host': 'localhost', 'filepath': f.name})
-
-                from pathlib import Path
-                print(f.name)
-
-                found_initial = wait_until(lambda: initial_content.strip() in container['content'],
-                                           timeout=10, sleep_for=1)
-                assert found_initial, "Expected initial content '%s' but was not found in: %s." \
-                                      % (initial_content, container['content'])
-
-                update_listen_content = 'update content\n'
-                f.write(update_listen_content)
-                f.flush()
-
-                found_update = wait_until(lambda: update_listen_content.strip() in container['content'],
-                                          timeout=10, sleep_for=1)
-                assert found_update, "Expected update content '%s' but was not found in: %s." \
-                                     % (update_listen_content, container['content'])
-
-                sio_client.emit('stop-listen-file')
-
-                after_stop_listen_content = 'some more content\n'
-                f.write(after_stop_listen_content)
-                f.flush()
-
-                time.sleep(3)
-                assert after_stop_listen_content not in container['content'], \
-                    "Should have stopped listening but found content."
-            finally:
-                sio_client.disconnect()
