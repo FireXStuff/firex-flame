@@ -141,7 +141,7 @@ def monitor_file(sio_server, sid, host, filename):
 
     except Exception as e:
         emit_line_data("ERROR: Spawned subprocess to monitor file failed:\n")
-        emit_line_data([str(e)])
+        emit_line_data(str(e))
 
 
 def term_subproc(sid):
