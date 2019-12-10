@@ -1,9 +1,10 @@
 import os
 import subprocess
 import urllib.parse
+import time
 
 from firexapp.broker_manager.broker_factory import BrokerFactory
-from firexapp.common import get_available_port, qualify_firex_bin, select_env_vars
+from firexapp.common import qualify_firex_bin, select_env_vars
 from firexapp.submit.tracking_service import TrackingService
 from firexapp.submit.console import setup_console_logging
 
@@ -61,6 +62,7 @@ class FlameLauncher(TrackingService):
         self.sync = None
         self.firex_logs_dir = None
         self.is_ready_for_tasks = False
+        self.start_time = None
 
     def extra_cli_arguments(self, arg_parser):
         arg_parser.add_argument('--flame_timeout', help='How long the webserver should run for, in seconds.',
@@ -100,7 +102,7 @@ class FlameLauncher(TrackingService):
         self.firex_logs_dir = uid.logs_dir
 
         flame_args = get_flame_args(uid, self.broker_recv_ready_file, args)
-
+        self.start_time = time.time()
         try:
             subprocess.Popen([qualify_firex_bin("firex_flame")] + flame_args,
                              stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT,              
@@ -117,13 +119,12 @@ class FlameLauncher(TrackingService):
 
         flame_url = get_flame_url(firex_logs_dir=self.firex_logs_dir)
         if flame_url is not None:
-            webserver_alive = web_request_ok(urllib.parse.urljoin(flame_url, '/alive'))
-            broker_recv_ready = os.path.isfile(self.broker_recv_ready_file)
-            self.is_ready_for_tasks = webserver_alive and broker_recv_ready
+            self.is_ready_for_tasks = os.path.isfile(self.broker_recv_ready_file)
 
             if self.is_ready_for_tasks:
                 # This will only be printed once due to initial guard.
                 logger.info('Flame: %s' % flame_url)
+                logger.warning("Flame up after %.2f s" % (time.time() - self.start_time))
 
         return self.is_ready_for_tasks
 
