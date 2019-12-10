@@ -63,6 +63,7 @@ class FlameLauncher(TrackingService):
         self.firex_logs_dir = None
         self.is_ready_for_tasks = False
         self.start_time = None
+        self.stdout_file = None
 
     def extra_cli_arguments(self, arg_parser):
         arg_parser.add_argument('--flame_timeout', help='How long the webserver should run for, in seconds.',
@@ -97,16 +98,22 @@ class FlameLauncher(TrackingService):
                                 default=None, const=True, nargs='?')
 
     def start(self, args, uid=None, **kwargs) -> dict:
-        self.broker_recv_ready_file = os.path.join(get_flame_debug_dir(uid.logs_dir), 'celery_receiver_ready')
+        flame_debug_dir = get_flame_debug_dir(uid.logs_dir)
+        os.makedirs(flame_debug_dir, exist_ok=True)
+        self.broker_recv_ready_file = os.path.join(flame_debug_dir, 'celery_receiver_ready')
+
         self.sync = args.sync
         self.firex_logs_dir = uid.logs_dir
 
         flame_args = get_flame_args(uid, self.broker_recv_ready_file, args)
+        self.stdout_file = os.path.join(flame_debug_dir, 'flame.stdout')
+
         self.start_time = time.time()
         try:
-            subprocess.Popen([qualify_firex_bin("firex_flame")] + flame_args,
-                             stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT,              
-                             close_fds=True, env=select_env_vars(['PATH']))
+            with open(self.stdout_file, 'w+') as f:
+                subprocess.Popen([qualify_firex_bin("firex_flame")] + flame_args,
+                                 stdout=f, stderr=subprocess.STDOUT,
+                                 close_fds=True, env=select_env_vars(['PATH']))
         except Exception as e:
             logger.error("Flame subprocess start failed: %s." % e)
             raise
