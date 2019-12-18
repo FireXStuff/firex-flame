@@ -62,7 +62,7 @@ def monitor_file(sio_server, sid, host, filename):
         ssh.connect(host, 22, timeout=60, compress=True)
 
         # Run find to locate file and match perms
-        _, stdout, stderr = ssh.exec_command("/bin/find %s -perm -004" % filename)
+        _, stdout, stderr = ssh.exec_command("\\find %s -perm -004" % filename)
         # Wait for command to return
         stdout.channel.recv_exit_status()
 
