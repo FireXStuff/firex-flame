@@ -4,12 +4,9 @@ import os
 from pathlib import Path
 import psutil
 import time
-import threading
-from socket import gethostname
 import signal
 import sys
 
-import requests
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +40,7 @@ def wait_until_pid_not_exist(pid, timeout=7, sleep_for=1):
 
 
 def web_request_ok(url):
+    import requests
     try:
         return requests.get(url).ok
     except requests.exceptions.ConnectionError:
@@ -68,26 +66,6 @@ def json_file_fn(json_file_path, fn):
         return fn(file_data)
 
 
-def _interrupt_main_thread():
-    try:
-        import _thread as thread
-    except ImportError:
-        # noinspection PyUnresolvedReferences
-        import thread
-    logger.info('Interrupting main thread.')
-    thread.interrupt_main()
-
-
-def stop_main_thread(reason):
-    logging.info("Stopping entire Flame Server for reason: %s" % reason)
-    if threading.current_thread() is threading.main_thread():
-        logger.info('Stopped from main thread, will sysexit.')
-        logging.shutdown()
-        sys.exit(0)
-    else:
-        _interrupt_main_thread()
-
-
 def get_rec_file(log_dir):
     return os.path.join(get_flame_debug_dir(log_dir), 'flame.rec')
 
@@ -105,7 +83,10 @@ def get_old_rec_file(log_dir):
     return os.path.join(log_dir, 'flame.rec')
 
 
-def get_flame_url(port, hostname=gethostname()):
+def get_flame_url(port, hostname=None):
+    if hostname is None:
+        from socket import gethostname
+        hostname = gethostname()
     return 'http://%s:%d' % (hostname, int(port))
 
 
@@ -146,3 +127,12 @@ def kill_and_wait(pid, sig=signal.SIGKILL, timeout=10):
 def create_rel_symlink(existing_path, symlink, target_is_directory=False):
     rel_new_file = os.path.relpath(existing_path, start=os.path.dirname(symlink))
     os.symlink(rel_new_file, symlink, target_is_directory=target_is_directory)
+
+
+class BrokerConsumerConfig:
+
+    def __init__(self, broker_url, max_retry_attempts, receiver_ready_file, terminate_on_complete):
+        self.broker_url = broker_url
+        self.max_retry_attempts = max_retry_attempts
+        self.receiver_ready_file = receiver_ready_file
+        self.terminate_on_complete = terminate_on_complete

@@ -1,18 +1,25 @@
+import sys
+
+# Prevent dependencies from taking module loading hit of pkg_resources.
+noop_class = type('noop', (object,), {'iter_entry_points': lambda _: []})
+sys.modules["pkg_resources"] = noop_class
+sys.modules["celery.events.dispatcher"] = type('noop2', (object,), {'EventDispatcher': noop_class})
+
+from gevent import monkey
+monkey.patch_all()
+
 import argparse
-import eventlet
 import logging
 import os
 from pathlib import Path
-import signal
+from gevent import signal
 from threading import Timer
 
-from firex_flame.main_app import run_flame
+from firex_flame.main_app import start_flame
 from firex_flame.flame_helper import get_flame_debug_dir, get_flame_pid_file_path, DEFAULT_FLAME_TIMEOUT, \
-    stop_main_thread, get_flame_url
-from firex_flame.event_broker_processor import BrokerConsumerConfig
+    BrokerConsumerConfig
 
 logger = logging.getLogger(__name__)
-eventlet.monkey_patch()
 
 
 def _parse_args():
@@ -55,16 +62,33 @@ def _parse_args():
     return parser.parse_args()
 
 
-def _sigterm_handler(_, __):
-    stop_main_thread('SIGTERM detected')
+class ShutdownSignalHandler:
 
+    def __init__(self):
+        self.web_server = None
+        signal.signal(signal.SIGTERM, self.sigterm_handler)
+        signal.signal(signal.SIGINT, self.sigint_handler)
 
-def _sigint_handler(_, __):
-    stop_main_thread('SIGINT detected')
+    def sigterm_handler(self, _, __):
+        self.shutdown('SIGTERM detected')
 
+    def sigint_handler(self, _, __):
+        self.shutdown('SIGINT detected')
 
-def _exit_on_timeout():
-    stop_main_thread('timeout exceeded')
+    def timeout_handler(self):
+        self.shutdown('timeout exceeded')
+
+    def shutdown(self, reason):
+        logging.info("Stopping entire Flame Server for reason: %s" % reason)
+        # TODO: shutdowns that occur while the broker is still receiving events will not have the data model dumped,
+        # since that's currently exclusively the responsibility of the broker processor. This shutdown method
+        # should do a 'dump complete if not already dumped' and handle concurrency issues.
+        logging.shutdown()
+        if self.web_server:
+            self.web_server.stop()
+        # lazy load this module for startup performance.
+        from firex_flame.api import term_all_subprocs
+        term_all_subprocs()
 
 
 def _config_logging(root_logs_dir):
@@ -80,9 +104,10 @@ def _config_logging(root_logs_dir):
     )
     # This module is very noisy (logs all data sent), so turn up the level.
     logging.getLogger('engineio.server').setLevel(logging.WARNING)
+    logging.getLogger('geventwebsocket.handler').setLevel(logging.WARNING)
 
 
-def _create_run_metadata(cli_args, bound_port):
+def _create_run_metadata(cli_args):
     return {
         'uid': cli_args.uid,
         'logs_dir': cli_args.logs_dir,
@@ -91,7 +116,8 @@ def _create_run_metadata(cli_args, bound_port):
         'chain': cli_args.chain,
         'logs_server': cli_args.logs_server,
         'central_documentation_url': cli_args.central_documentation_url,
-        'flame_url': get_flame_url(bound_port),
+        # flame_url is lazy loaded since port is only guaranteed to be known after the web server has started.
+        'flame_url': None,
         'firex_bin': cli_args.firex_bin_path,
         'root_uuid': None,
     }
@@ -112,31 +138,27 @@ class NoopTimer:
         pass
 
 
-def _run_from_args(args):
-    logger.info('Starting Flame Server with args: %s' % args)
-
-    socket = eventlet.listen(('', args.port))
-    bound_webapp_port = socket.getsockname()[1]
-    logger.info('Bound to webapp port: %s' % bound_webapp_port)
-
-    run_flame(create_broker_processor_config(args),
-              socket,
-              _create_run_metadata(args, bound_webapp_port),
-              args.recording)
-
-
 def main():
-    signal.signal(signal.SIGTERM, _sigterm_handler)
-    signal.signal(signal.SIGINT, _sigint_handler)
+    shutdown_handler = ShutdownSignalHandler()
 
     args = _parse_args()
     _config_logging(args.logs_dir)
-    t = NoopTimer() if args.terminate_on_complete else Timer(args.flame_timeout, _exit_on_timeout)
+    t = NoopTimer() if args.terminate_on_complete else Timer(args.flame_timeout, shutdown_handler.timeout_handler)
     try:
         t.start()
-        _run_from_args(args)
+        logger.info('Starting Flame Server with args: %s' % args)
+        web_server = start_flame(args.port, create_broker_processor_config(args),
+                                 _create_run_metadata(args), args.recording, shutdown_handler)
+        # Allow the shutdown handler to stop the web server before we serve_forever.
+        shutdown_handler.web_server = web_server
+        web_server.serve_forever()
         t.cancel()
     except Exception as e:
         logger.exception(e)
+        shutdown_handler.shutdown(str(e))
     finally:
         logger.info("Flame server finished.")
+
+
+if __name__ == '__main__':
+    main()

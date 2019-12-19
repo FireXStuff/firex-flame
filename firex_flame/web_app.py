@@ -7,9 +7,16 @@ import urllib.parse
 from contextlib import ExitStack
 import atexit
 
+import socketio
+from gevent import pywsgi
+from geventwebsocket.handler import WebSocketHandler
+
 from flask import Flask, Blueprint, redirect, send_from_directory, Response, render_template
 from flask_autoindex import AutoIndexBlueprint
+
+from firex_flame.api import create_socketio_task_api, create_revoke_api, create_rest_task_api, term_all_subprocs
 from firexapp.submit.reporting import REL_COMPLETION_REPORT_PATH
+from firex_flame.flame_helper import get_flame_url
 
 logger = logging.getLogger(__name__)
 
@@ -156,3 +163,25 @@ def create_web_app(run_metadata):
     web_app.register_blueprint(auto_index, url_prefix=run_metadata['logs_dir'])
 
     return web_app
+
+
+def start_web_server(webapp_port, event_aggregator, run_metadata, revoke_api_config):
+    web_app = create_web_app(run_metadata)
+    # TODO: parametrize cors_allowed_origins.
+    sio_server = socketio.Server(cors_allowed_origins='*', async_mode='gevent')
+    sio_web_app = socketio.WSGIApp(sio_server, web_app)
+
+    create_socketio_task_api(sio_server, event_aggregator, run_metadata)
+    create_rest_task_api(web_app, event_aggregator, run_metadata)
+
+    server = pywsgi.WSGIServer(('', webapp_port), sio_web_app, handler_class=WebSocketHandler)
+    server.start()  # Need to start() to get port if supplied 0.
+
+    if revoke_api_config:
+        revoke_api_config['flame_controller'].sio_server = sio_server
+        run_metadata['flame_url'] = get_flame_url(server.server_port)
+        # Can only dump initial metadata now that flame_url is set.
+        revoke_api_config['flame_controller'].dump_initial_metadata()
+        create_revoke_api(sio_server, web_app, revoke_api_config['celery_app'], event_aggregator.tasks_by_uuid)
+
+    return server

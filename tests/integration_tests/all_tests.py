@@ -134,7 +134,7 @@ class FlameSigtermShutdownTest(FlameFlowTestConfiguration):
     """ Flame shutsdown cleanly when getting a sigterm."""
 
     def initial_firex_options(self) -> list:
-        return ["submit", "--chain", 'sleep', '--sleep', '60']
+        return ["submit", "--chain", 'sleep']
 
     def assert_on_flame_url(self, log_dir, flame_url):
         flame_pid = get_flame_pid(log_dir)
@@ -147,7 +147,7 @@ class FlameSigintShutdownTest(FlameFlowTestConfiguration):
     """ Flame shutsdown cleanly when getting a sigint."""
 
     def initial_firex_options(self) -> list:
-        return ["submit", "--chain", 'sleep', '--sleep', '60']
+        return ["submit", "--chain", 'sleep']
 
     def assert_on_flame_url(self, log_dir, flame_url):
         flame_pid = get_flame_pid(log_dir)
@@ -354,7 +354,8 @@ class DumpDataOnCompleteTest(FlameFlowTestConfiguration):
         return ["submit", "--chain", 'add', '--op1', '1', '--op2', '2']
 
     def assert_on_flame_url(self, log_dir, flame_url):
-        assert is_dump_complete(log_dir), "Model dump not complete, can't assert on task data."
+        dump_complete = wait_until(is_dump_complete, 5, 0.1, log_dir)
+        assert dump_complete, "Model dump not complete, can't assert on task data."
 
         tasks_by_name = get_model_full_tasks_by_names(log_dir, ['add'])
         assert len(tasks_by_name) == 1

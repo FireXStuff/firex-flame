@@ -3,49 +3,46 @@ import os
 from threading import Thread
 
 import celery
-import socketio
-import eventlet
 
-from firex_flame.api import create_socketio_task_api, create_revoke_api, create_rest_task_api, term_all_subprocs
 from firex_flame.controller import FlameAppController
 from firex_flame.event_file_processor import process_recording_file
 from firex_flame.event_broker_processor import BrokerEventConsumerThread
 from firex_flame.event_aggregator import FlameEventAggregator
-from firex_flame.web_app import create_web_app
+from firex_flame.flame_helper import wait_until_path_exist
 
 logger = logging.getLogger(__name__)
 
 
-def run_flame(broker_consumer_config, webapp_socket, run_metadata, recording_file):
-    web_app = create_web_app(run_metadata)
-    # TODO: parametrize cors_allowed_origins.
-    sio_server = socketio.Server(cors_allowed_origins='*')
-    sio_web_app = socketio.Middleware(sio_server, web_app)
+def create_broker_consumer_thread(broker_consumer_config, run_metadata, event_aggregator,
+                                  recording_file, shutdown_handler):
+    assert broker_consumer_config.broker_url, "Since recording file doesn't exist, the broker is required."
 
+    controller = FlameAppController(run_metadata)
+    celery_app = celery.Celery(broker=broker_consumer_config.broker_url)
+
+    return BrokerEventConsumerThread(celery_app,
+                                     controller,
+                                     event_aggregator,
+                                     broker_consumer_config,
+                                     recording_file,
+                                     shutdown_handler)
+
+
+def start_flame(webapp_port, broker_consumer_config, run_metadata, recording_file, shutdown_handler):
     event_aggregator = FlameEventAggregator()
-    if recording_file and os.path.isfile(recording_file):
-        event_recv_thread = Thread(target=process_recording_file, args=(event_aggregator, recording_file, run_metadata))
+    if not recording_file or not os.path.isfile(recording_file):
+        event_recv_thread = create_broker_consumer_thread(broker_consumer_config, run_metadata,
+                                                          event_aggregator, recording_file, shutdown_handler)
+        revoke_api_config = {'celery_app': event_recv_thread.celery_app,
+                             'flame_controller': event_recv_thread.flame_controller}
     else:
-        assert broker_consumer_config.broker_url, "Since recording file doesn't exist, the broker is required."
-        controller = FlameAppController(sio_server, run_metadata)
-        controller.dump_initial_metadata()
-        celery_app = celery.Celery(broker=broker_consumer_config.broker_url)
-        event_recv_thread = BrokerEventConsumerThread(celery_app,
-                                                      controller,
-                                                      event_aggregator,
-                                                      broker_consumer_config,
-                                                      recording_file,
-                                                      )
-        create_revoke_api(sio_server, web_app, celery_app, event_aggregator.tasks_by_uuid)
-
-    create_socketio_task_api(sio_server, event_aggregator, run_metadata)
-    create_rest_task_api(web_app, event_aggregator, run_metadata)
+        event_recv_thread = Thread(target=process_recording_file, args=(event_aggregator, recording_file, run_metadata))
+        revoke_api_config = None
     event_recv_thread.start()
 
-    try:
-        eventlet.wsgi.server(webapp_socket, sio_web_app)
-    except KeyboardInterrupt:
-        logger.info('KeyboardInterrupt - Shutting down')
-    finally:
-        webapp_socket.close()
-        term_all_subprocs()
+    wait_until_path_exist(broker_consumer_config.receiver_ready_file, sleep_for=0.1)
+
+    # Delaying of importing of all web dependencies is a deliberate startup performance optimization.
+    # The broker should be listening for events as quickly as possible.
+    from firex_flame.web_app import start_web_server
+    return start_web_server(webapp_port, event_aggregator, run_metadata, revoke_api_config)

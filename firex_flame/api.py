@@ -10,7 +10,7 @@ from firex_flame.flame_helper import wait_until
 
 from firex_flame.event_aggregator import slim_tasks_by_uuid, INCOMPLETE_STATES
 
-from eventlet import spawn, sleep
+from gevent import spawn, sleep
 
 import paramiko
 

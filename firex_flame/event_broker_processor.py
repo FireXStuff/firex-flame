@@ -12,26 +12,17 @@ import time
 from celery.events import EventReceiver
 
 from firex_flame.controller import FlameAppController
-from firex_flame.flame_helper import stop_main_thread
+from firex_flame.flame_helper import BrokerConsumerConfig
 
 logger = logging.getLogger(__name__)
-
-
-class BrokerConsumerConfig:
-
-    def __init__(self, broker_url, max_retry_attempts, receiver_ready_file, terminate_on_complete):
-        self.broker_url = broker_url
-        self.max_retry_attempts = max_retry_attempts
-        self.receiver_ready_file = receiver_ready_file
-        self.terminate_on_complete = terminate_on_complete
 
 
 class BrokerEventConsumerThread(threading.Thread):
     """Events threading class
     """
     def __init__(self, celery_app, flame_controller: FlameAppController, event_aggregator, config: BrokerConsumerConfig,
-                 recording_file: str):
-        threading.Thread.__init__(self)
+                 recording_file: str, shutdown_handler):
+        threading.Thread.__init__(self, daemon=True)
         self.celery_app = celery_app
         self.recording_file = recording_file
         self.flame_controller = flame_controller
@@ -39,6 +30,7 @@ class BrokerEventConsumerThread(threading.Thread):
         self.max_try_interval = 2**config.max_retry_attempts if config.max_retry_attempts is not None else 32
         self.terminate_on_complete = config.terminate_on_complete
         self.stopped_externally = False
+        self.shutdown_handler = shutdown_handler
 
         if config.receiver_ready_file:
             self.receiver_ready_file = Path(config.receiver_ready_file)
@@ -76,7 +68,7 @@ class BrokerEventConsumerThread(threading.Thread):
         finally:
             logger.info("Completed receiver cleanup.")
             if self.terminate_on_complete and not self.stopped_externally:
-                stop_main_thread("Terminating on completion, as requested by input args.")
+                self.shutdown_handler.shutdown("Terminating on completion, as requested by input args.")
 
     def _run_from_broker(self):
         """Load the events from celery"""
@@ -100,7 +92,7 @@ class BrokerEventConsumerThread(threading.Thread):
                     recv.capture(limit=None, timeout=None, wakeup=True)
             except (KeyboardInterrupt, SystemExit) as e:
                 self.stopped_externally = True
-                stop_main_thread(str(e))
+                self.shutdown_handler.shutdown(str(e))
             # pylint: disable=C0321
             except Exception:
                 if self.event_aggregator.is_root_complete():
