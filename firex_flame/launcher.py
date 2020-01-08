@@ -1,6 +1,5 @@
 import os
 import subprocess
-import urllib.parse
 import time
 
 from firexapp.broker_manager.broker_factory import BrokerFactory
@@ -8,9 +7,8 @@ from firexapp.common import qualify_firex_bin, select_env_vars
 from firexapp.submit.tracking_service import TrackingService
 from firexapp.submit.console import setup_console_logging
 
-from firex_flame.flame_helper import DEFAULT_FLAME_TIMEOUT, get_flame_debug_dir, \
-    get_rec_file, web_request_ok
-from firex_flame.model_dumper import is_dump_complete, get_flame_url
+from firex_flame.flame_helper import DEFAULT_FLAME_TIMEOUT, get_flame_debug_dir, get_rec_file
+from firex_flame.model_dumper import is_dump_complete, get_run_metadata_file, get_flame_url
 
 logger = setup_console_logging(__name__)
 
@@ -47,14 +45,6 @@ def get_flame_args(uid, broker_recv_ready_file, args):
     return result
 
 
-def url_join(host, start_path, end_path):
-    if start_path.endswith('/'):
-        path = start_path + end_path
-    else:
-        path = '%s/%s' % (start_path, end_path)
-    return urllib.parse.urljoin(host, path)
-
-
 class FlameLauncher(TrackingService):
 
     def __init__(self):
@@ -64,6 +54,7 @@ class FlameLauncher(TrackingService):
         self.is_ready_for_tasks = False
         self.start_time = None
         self.stdout_file = None
+        self.wait_for_webserver = None
 
     def extra_cli_arguments(self, arg_parser):
         arg_parser.add_argument('--flame_timeout', help='How long the webserver should run for, in seconds.',
@@ -96,6 +87,9 @@ class FlameLauncher(TrackingService):
         arg_parser.add_argument('--flame_terminate_on_complete',
                                 help='Terminate Flame when run completes. Ignores timeout arg entirely.',
                                 default=None, const=True, nargs='?')
+        arg_parser.add_argument('--wait_for_webserver',
+                                help='Wait for webserver when waiting to be ready for tasks.',
+                                default=True, const=True, nargs='?')
 
     def start(self, args, uid=None, **kwargs) -> dict:
         flame_debug_dir = get_flame_debug_dir(uid.logs_dir)
@@ -104,6 +98,7 @@ class FlameLauncher(TrackingService):
 
         self.sync = args.sync
         self.firex_logs_dir = uid.logs_dir
+        self.wait_for_webserver = args.wait_for_webserver
 
         flame_args = get_flame_args(uid, self.broker_recv_ready_file, args)
         self.stdout_file = os.path.join(flame_debug_dir, 'flame.stdout')
@@ -121,17 +116,21 @@ class FlameLauncher(TrackingService):
         return {}
 
     def ready_for_tasks(self, **kwargs) -> bool:
-        if self.is_ready_for_tasks:
-            return True
+        if not self.is_ready_for_tasks:
+            broker_ready = os.path.isfile(self.broker_recv_ready_file)
 
-        flame_url = get_flame_url(firex_logs_dir=self.firex_logs_dir)
-        if flame_url is not None:
-            self.is_ready_for_tasks = os.path.isfile(self.broker_recv_ready_file)
+            if self.wait_for_webserver:
+                webserver_ready = os.path.isfile(get_run_metadata_file(firex_logs_dir=self.firex_logs_dir))
+            else:
+                webserver_ready = True
 
+            self.is_ready_for_tasks = broker_ready and webserver_ready
             if self.is_ready_for_tasks:
-                # This will only be printed once due to initial guard.
-                logger.info('Flame: %s' % flame_url)
-                logger.warning("Flame up after %.2f s" % (time.time() - self.start_time))
+                logger.debug("Flame up after %.2f s" % (time.time() - self.start_time))
+
+                if self.wait_for_webserver:
+                    # Only print Flame URL if we've waited for webserver, since otherwise we don't know the port.
+                    logger.info("Flame: %s" % get_flame_url(firex_logs_dir=self.firex_logs_dir))
 
         return self.is_ready_for_tasks
 

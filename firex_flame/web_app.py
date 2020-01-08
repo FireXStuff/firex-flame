@@ -14,7 +14,7 @@ from geventwebsocket.handler import WebSocketHandler
 from flask import Flask, Blueprint, redirect, send_from_directory, Response, render_template
 from flask_autoindex import AutoIndexBlueprint
 
-from firex_flame.api import create_socketio_task_api, create_revoke_api, create_rest_task_api, term_all_subprocs
+from firex_flame.api import create_socketio_task_api, create_revoke_api, create_rest_task_api
 from firexapp.submit.reporting import REL_COMPLETION_REPORT_PATH
 from firex_flame.flame_helper import get_flame_url
 

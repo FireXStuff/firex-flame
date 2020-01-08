@@ -70,17 +70,9 @@ def get_rec_file(log_dir):
     return os.path.join(get_flame_debug_dir(log_dir), 'flame.rec')
 
 
-# Temporarily support both current and old rec file locations.
 def find_rec_file(log_dir):
-    rec_file = get_rec_file(log_dir) 
-    if os.path.isfile(rec_file):
-        return rec_file
-    old_rec_file = get_old_rec_file(log_dir)
-    return old_rec_file
-
-
-def get_old_rec_file(log_dir):
-    return os.path.join(log_dir, 'flame.rec')
+    # Formerly was used for backwards compatability, now an alias for get_rec_file
+    return get_rec_file(log_dir)
 
 
 def get_flame_url(port, hostname=None):
