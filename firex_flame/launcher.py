@@ -87,7 +87,7 @@ class FlameLauncher(TrackingService):
         arg_parser.add_argument('--flame_terminate_on_complete',
                                 help='Terminate Flame when run completes. Ignores timeout arg entirely.',
                                 default=None, const=True, nargs='?')
-        arg_parser.add_argument('--wait_for_webserver',
+        arg_parser.add_argument('--flame_wait_for_webserver',
                                 help='Wait for webserver when waiting to be ready for tasks.',
                                 default=True, const=True, nargs='?')
 
@@ -98,7 +98,7 @@ class FlameLauncher(TrackingService):
 
         self.sync = args.sync
         self.firex_logs_dir = uid.logs_dir
-        self.wait_for_webserver = args.wait_for_webserver
+        self.wait_for_webserver = args.flame_wait_for_webserver
 
         flame_args = get_flame_args(uid, self.broker_recv_ready_file, args)
         self.stdout_file = os.path.join(flame_debug_dir, 'flame.stdout')
