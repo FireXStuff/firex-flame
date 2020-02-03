@@ -232,7 +232,10 @@ class FlameEventAggregator:
         that is generated here so that the UI can show a non-incomplete runstate.
         :return:
         """
-        return [{'uuid': task['uuid'], 'type': 'task-incomplete', 'timestamp': datetime.now().timestamp()}
+        now = datetime.now().timestamp()
+        return [{'uuid': task['uuid'],
+                 'type': 'task-incomplete',
+                 'actual_runtime': now - task.get('first_started', now)}
                 for task in self.tasks_by_uuid.values()
                 if task['state'] in INCOMPLETE_STATES]
 
