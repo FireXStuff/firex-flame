@@ -7,7 +7,7 @@ from firexapp.common import qualify_firex_bin, select_env_vars
 from firexapp.submit.tracking_service import TrackingService
 from firexapp.submit.console import setup_console_logging
 
-from firex_flame.flame_helper import DEFAULT_FLAME_TIMEOUT, get_flame_debug_dir, get_rec_file
+from firex_flame.flame_helper import DEFAULT_FLAME_TIMEOUT, get_flame_debug_dir, get_rec_file, is_json_file
 from firex_flame.model_dumper import is_dump_complete, get_run_metadata_file, get_flame_url
 
 logger = setup_console_logging(__name__)
@@ -89,7 +89,7 @@ class FlameLauncher(TrackingService):
                                 default=None, const=True, nargs='?')
         arg_parser.add_argument('--flame_wait_for_webserver',
                                 help='Wait for webserver when waiting to be ready for tasks.',
-                                default=True, const=True, nargs='?')
+                                default=None, const=True, nargs='?')
 
     def start(self, args, uid=None, **kwargs) -> dict:
         flame_debug_dir = get_flame_debug_dir(uid.logs_dir)
@@ -98,7 +98,11 @@ class FlameLauncher(TrackingService):
 
         self.sync = args.sync
         self.firex_logs_dir = uid.logs_dir
-        self.wait_for_webserver = args.flame_wait_for_webserver
+
+        if args.flame_wait_for_webserver is None:
+            self.wait_for_webserver = True
+        else:
+            self.wait_for_webserver = args.flame_wait_for_webserver
 
         flame_args = get_flame_args(uid, self.broker_recv_ready_file, args)
         self.stdout_file = os.path.join(flame_debug_dir, 'flame.stdout')
@@ -120,7 +124,8 @@ class FlameLauncher(TrackingService):
             broker_ready = os.path.isfile(self.broker_recv_ready_file)
 
             if self.wait_for_webserver:
-                webserver_ready = os.path.isfile(get_run_metadata_file(firex_logs_dir=self.firex_logs_dir))
+                run_metadata_file = get_run_metadata_file(firex_logs_dir=self.firex_logs_dir)
+                webserver_ready = os.path.isfile(run_metadata_file) and is_json_file(run_metadata_file)
             else:
                 webserver_ready = True
 

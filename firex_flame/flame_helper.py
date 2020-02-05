@@ -128,3 +128,12 @@ class BrokerConsumerConfig:
         self.max_retry_attempts = max_retry_attempts
         self.receiver_ready_file = receiver_ready_file
         self.terminate_on_complete = terminate_on_complete
+
+
+def is_json_file(file_path):
+    try:
+        json.loads(Path(file_path).read_text())
+    except json.decoder.JSONDecodeError:
+        return False
+    else:
+        return True
