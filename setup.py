@@ -16,7 +16,8 @@ setup(name='firex_flame',
       zip_safe=True,
       install_requires=[
             "Flask==1.0.2",
-            "Flask-AutoIndex",
+            "Flask-AutoIndex==0.6.4",
+            "Werkzeug==0.16.1",
             "python-socketio==4.1.0",
             "python-engineio==3.10.0", # 3.11.0 causes launch crash when tornado dependency isn't present.
             'firexapp',
