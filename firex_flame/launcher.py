@@ -36,6 +36,7 @@ def get_flame_args(uid, broker_recv_ready_file, args):
         'broker_max_retry_attempts': args.broker_max_retry_attempts,
         'terminate_on_complete': args.flame_terminate_on_complete,
         'firex_bin_path': args.firex_bin_path,
+        'extra_task_dump_paths': args.flame_extra_task_dump_paths,
     }
     result = []
     for k, v in cmd_args.items():
@@ -90,6 +91,9 @@ class FlameLauncher(TrackingService):
         arg_parser.add_argument('--flame_wait_for_webserver',
                                 help='Wait for webserver when waiting to be ready for tasks.',
                                 default=None, const=True, nargs='?')
+        arg_parser.add_argument('--flame_extra_task_dump_paths',
+                                help='Paths specifying alternative task reprentations to dump at end of flame.',
+                                default=None)
 
     def start(self, args, uid=None, **kwargs) -> dict:
         flame_debug_dir = get_flame_debug_dir(uid.logs_dir)

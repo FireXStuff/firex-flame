@@ -5,7 +5,7 @@ from pathlib import Path
 import tarfile
 
 from firex_flame.event_aggregator import slim_tasks_by_uuid, COMPLETE_STATES
-from firex_flame.flame_helper import get_flame_debug_dir
+from firex_flame.flame_helper import get_flame_debug_dir, query_tasks
 
 logger = logging.getLogger(__name__)
 
@@ -113,8 +113,12 @@ class FlameModelDumper:
         _write_json(metadata_model_file, {**complete, **run_metadata})
         return metadata_model_file
 
-    def dump_aggregator_complete_data_model(self, event_aggregator, run_metadata=None):
+    def dump_aggregator_complete_data_model(self, event_aggregator, run_metadata=None, extra_task_representations=None):
         self.dump_complete_data_model(event_aggregator.tasks_by_uuid, event_aggregator.root_uuid, run_metadata)
+        if extra_task_representations:
+            for repr_file_path in extra_task_representations:
+                self.dump_task_representation(event_aggregator.tasks_by_uuid, repr_file_path)
+        Path(get_model_complete_file(root_model_dir=self.root_model_dir)).touch()
 
     def dump_complete_data_model(self, tasks_by_uuid, root_uuid=None, run_metadata=None):
         logger.info("Starting to dump complete Flame model.")
@@ -151,5 +155,21 @@ class FlameModelDumper:
             for path in paths_to_compress:
                 tar.add(path, arcname=os.path.basename(path))
 
-        Path(get_model_complete_file(root_model_dir=self.root_model_dir)).touch()
         logger.info("Finished dumping complete Flame model.")
+
+    def dump_task_representation(self, tasks_by_uuid, representation_file):
+        logger.info(f"Starting to dump task representation in: {representation_file}.")
+
+        try:
+            with open(representation_file) as fp:
+                representation_data = json.load(fp)
+
+            file_basename = representation_data['model_file_name']
+            out_file = os.path.join(self.root_model_dir, file_basename)
+            queried_tasks = query_tasks(tasks_by_uuid, representation_data['task_queries'], tasks_by_uuid)
+            _write_json(out_file, queried_tasks)
+        except Exception as e:
+            # Don't interfere with shutdown even if extra representation dumping fails.
+            logger.error(f"Failed to dump representation of {representation_file}: {e}")
+        else:
+            logger.info(f"Finished dumping task representation in: {representation_file}.")

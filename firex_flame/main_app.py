@@ -14,10 +14,10 @@ logger = logging.getLogger(__name__)
 
 
 def create_broker_consumer_thread(broker_consumer_config, run_metadata, event_aggregator,
-                                  recording_file, shutdown_handler):
+                                  recording_file, shutdown_handler, extra_task_dump_paths):
     assert broker_consumer_config.broker_url, "Since recording file doesn't exist, the broker is required."
 
-    controller = FlameAppController(run_metadata)
+    controller = FlameAppController(run_metadata, extra_task_dump_paths)
     celery_app = celery.Celery(broker=broker_consumer_config.broker_url)
 
     return BrokerEventConsumerThread(celery_app,
@@ -28,11 +28,13 @@ def create_broker_consumer_thread(broker_consumer_config, run_metadata, event_ag
                                      shutdown_handler)
 
 
-def start_flame(webapp_port, broker_consumer_config, run_metadata, recording_file, shutdown_handler):
+def start_flame(webapp_port, broker_consumer_config, run_metadata, recording_file, shutdown_handler,
+                extra_task_dump_paths):
     event_aggregator = FlameEventAggregator()
     if not recording_file or not os.path.isfile(recording_file):
         event_recv_thread = create_broker_consumer_thread(broker_consumer_config, run_metadata,
-                                                          event_aggregator, recording_file, shutdown_handler)
+                                                          event_aggregator, recording_file, shutdown_handler,
+                                                          extra_task_dump_paths)
         revoke_api_config = {'celery_app': event_recv_thread.celery_app,
                              'flame_controller': event_recv_thread.flame_controller}
     else:

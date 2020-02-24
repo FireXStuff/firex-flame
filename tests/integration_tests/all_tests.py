@@ -8,6 +8,7 @@ import time
 import requests
 import urllib.parse
 import tempfile
+from pathlib import Path
 
 from bs4 import BeautifulSoup
 import socketio
@@ -21,7 +22,10 @@ from firex_flame.flame_helper import get_flame_pid, wait_until_pid_not_exist, wa
     kill_flame, kill_and_wait, json_file_fn
 from firex_flame.event_aggregator import INCOMPLETE_STATES, COMPLETE_STATES
 from firex_flame.model_dumper import get_tasks_slim_file, get_model_full_tasks_by_names, is_dump_complete, \
-    get_run_metadata_file, get_flame_url
+    get_run_metadata_file, get_flame_url, find_flame_model_dir
+
+
+test_data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 
 
 class FlameFlowTestConfiguration(FlowTestConfiguration):
@@ -296,7 +300,6 @@ class FlameRedisKillCleanupTest(FlameFlowTestConfiguration):
         sleep_exists = wait_until_task_name_exists_in_rec(log_dir, 'sleep')
         assert sleep_exists, "Sleep task doesn't exist in the flame rec file, something is wrong with run."
 
-        from pathlib import Path
         redis_pid = int(Path(log_dir,'debug', 'redis', 'redis.pid').read_text())
         redis_killed = kill_and_wait(redis_pid, sig=signal.SIGKILL)
         assert redis_killed, "Failed to kill redis with pid %s" % redis_pid
@@ -371,6 +374,45 @@ class DumpDataOnCompleteTest(FlameFlowTestConfiguration):
 
         found_paths = filter_paths(tasks_by_name, query)['add']
         assert len(found_paths) == 1
+
+
+@app.task(bind=True)
+def Parent(self):
+    self.enqueue_child(Child.s(), block=True)
+
+
+@app.task(bind=True)
+def Child(self):
+    self.enqueue_child(GrandChild.s(), block=True)
+
+
+@app.task
+def GrandChild():
+    pass
+
+
+test_query_file = os.path.join(test_data_dir, 'extra-task-query.json')
+
+
+class DumpExtraRepDataOnCompleteTest(FlameFlowTestConfiguration):
+    """ Tests task data model dumping of flame_extra_task_dump_paths is performed. """
+
+    def initial_firex_options(self) -> list:
+        return ["submit", "--chain", 'Parent', "--flame_extra_task_dump_paths", test_query_file]
+
+    def assert_on_flame_url(self, log_dir, flame_url):
+        dump_complete = wait_until(is_dump_complete, 5, 0.1, log_dir)
+        assert dump_complete, "Model dump not complete, can't assert on task data."
+
+        extra_dump_file_basename = json.loads(Path(test_query_file).read_text())['model_file_name']
+        dumped_file = os.path.join(find_flame_model_dir(log_dir), extra_dump_file_basename)
+        dumped_file_data = json.loads(Path(dumped_file).read_text())
+
+        assert len(dumped_file_data) == 1
+        single_task = list(dumped_file_data.values())[0]
+        assert single_task['name'] == 'Parent'
+        assert len(single_task['descendants']) == 1
+        assert list(single_task['descendants'].values())[0]['name'] == 'GrandChild'
 
 
 class FlameLiveMonitorFile(FlameFlowTestConfiguration):

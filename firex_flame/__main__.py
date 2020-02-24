@@ -59,6 +59,10 @@ def _parse_args():
                              'Causes the value of --flame_timeout to be ignored entirely.',
                         type=bool,
                         default=False)
+    parser.add_argument('--extra_task_dump_paths',
+                        help='Path to files specifying alternate task dump formats.',
+                        type=str, default='')
+
     return parser.parse_args()
 
 
@@ -148,7 +152,8 @@ def main():
         t.start()
         logger.info('Starting Flame Server with args: %s' % args)
         web_server = start_flame(args.port, create_broker_processor_config(args),
-                                 _create_run_metadata(args), args.recording, shutdown_handler)
+                                 _create_run_metadata(args), args.recording, shutdown_handler,
+                                 args.extra_task_dump_paths.split(',') if args.extra_task_dump_paths else [])
         # Allow the shutdown handler to stop the web server before we serve_forever.
         shutdown_handler.web_server = web_server
         web_server.serve_forever()

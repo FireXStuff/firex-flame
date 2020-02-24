@@ -4,6 +4,8 @@ Aggregates events in to the task data model.
 from datetime import datetime
 import logging
 
+from firex_flame.flame_helper import deep_merge
+
 logger = logging.getLogger(__name__)
 
 TASK_ARGS = 'firex_bound_args'
@@ -128,37 +130,7 @@ INCOMPLETE_STATES = [s for s, v in STATE_TYPES.items() if not v['terminal']]
 def _deep_merge_keys(dict1, dict2, keys):
     dict1_to_merge = {k: v for k, v in dict1.items() if k in keys}
     dict2_to_merge = {k: v for k, v in dict2.items() if k in keys}
-    return _deep_merge(dict1_to_merge, dict2_to_merge)
-
-
-def _both_instance(o1, o2, _type):
-    return isinstance(o1, _type) and isinstance(o2, _type)
-
-
-def _deep_merge(dict1, dict2):
-    result = dict(dict1)
-    for d2_key in dict2:
-        if d2_key in dict1:
-            v1 = dict1[d2_key]
-            v2 = dict2[d2_key]
-            if _both_instance(v1, v2, dict):
-                result[d2_key] = _deep_merge(v1, v2)
-            elif _both_instance(v1, v2, list):
-                result[d2_key] = v1 + v2
-            elif _both_instance(v1, v2, set):
-                result[d2_key] = v1.union(v2)
-            elif v1 == v2:
-                # already the same value in both dicts, take from either.
-                result[d2_key] = v1
-            else:
-                # Both d1 and d2 have entries for d2_key, both entries are not dicts or lists or sets,
-                # and the values are not the same. This is a conflict.
-                # Overwrite d1's value to simulate dict.update() behaviour.
-                result[d2_key] = v2
-        else:
-            # New key for d1, just add it.
-            result[d2_key] = dict2[d2_key]
-    return result
+    return deep_merge(dict1_to_merge, dict2_to_merge)
 
 
 # Event data extraction/transformation without current state context.
