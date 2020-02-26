@@ -165,23 +165,24 @@ def create_web_app(run_metadata):
     return web_app
 
 
-def start_web_server(webapp_port, event_aggregator, run_metadata, revoke_api_config):
+def start_web_server(webapp_port, event_aggregator, run_metadata, controller, celery_app):
     web_app = create_web_app(run_metadata)
     # TODO: parametrize cors_allowed_origins.
     sio_server = socketio.Server(cors_allowed_origins='*', async_mode='gevent')
     sio_web_app = socketio.WSGIApp(sio_server, web_app)
+    controller.sio_server = sio_server
 
-    create_socketio_task_api(sio_server, event_aggregator, run_metadata)
+    create_socketio_task_api(controller, event_aggregator, run_metadata)
     create_rest_task_api(web_app, event_aggregator, run_metadata)
 
     server = pywsgi.WSGIServer(('', webapp_port), sio_web_app, handler_class=WebSocketHandler)
     server.start()  # Need to start() to get port if supplied 0.
 
-    if revoke_api_config:
-        revoke_api_config['flame_controller'].sio_server = sio_server
+    if celery_app:
+        # Celery app means this is initial launch, not a replay from a rec file.
         run_metadata['flame_url'] = get_flame_url(server.server_port)
         # Can only dump initial metadata now that flame_url is set.
-        revoke_api_config['flame_controller'].dump_initial_metadata()
-        create_revoke_api(sio_server, web_app, revoke_api_config['celery_app'], event_aggregator.tasks_by_uuid)
+        controller.dump_initial_metadata()
+        create_revoke_api(sio_server, web_app, celery_app, event_aggregator.tasks_by_uuid)
 
     return server

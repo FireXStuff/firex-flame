@@ -19,7 +19,7 @@ from firexkit.chain import returns
 
 from firex_flame.event_file_processor import get_tasks_from_rec_file
 from firex_flame.flame_helper import get_flame_pid, wait_until_pid_not_exist, wait_until, get_rec_file, filter_paths, \
-    kill_flame, kill_and_wait, json_file_fn
+    kill_flame, kill_and_wait, json_file_fn, wait_until_path_exist, deep_merge, wait_until_web_request_ok
 from firex_flame.event_aggregator import INCOMPLETE_STATES, COMPLETE_STATES
 from firex_flame.model_dumper import get_tasks_slim_file, get_model_full_tasks_by_names, is_dump_complete, \
     get_run_metadata_file, get_flame_url, find_flame_model_dir
@@ -284,6 +284,78 @@ class FlameRevokeSuccessTest(FlameFlowTestConfiguration):
         sleep_task_after_revoke = get_tasks_by_name(log_dir, 'sleep', expect_single=True)
         sleep_runstate = sleep_task_after_revoke['state']
         assert sleep_runstate == 'task-revoked', "Expected sleep runstate to be revoked, was %s" % sleep_runstate
+
+
+@app.task(bind=True)
+def WaitingParent(self, uid):
+    wait_until_path_exist(os.path.join(uid.logs_dir, 'wait_file'), timeout=10, sleep_for=0.5)
+    self.enqueue_child(Child.s(), block=True)
+
+
+TEST_TASK_QUERY = [
+    {
+        "matchCriteria": {"type": "always-select-fields"},
+        "selectPaths": ["uuid", "name", "state"]
+    },
+    {
+        "matchCriteria": {
+            "type": "equals",
+            "value": {"name": "WaitingParent"}
+        },
+        "selectDescendants": [
+            {"type": "equals", "value": {"name": "GrandChild"}}
+        ],
+    },
+]
+
+
+def find_tasks_by_name(tasks_by_uuid, task_name):
+    return [t for t in tasks_by_uuid.values() if t['name'] == task_name]
+
+
+def find_task_by_name(tasks_by_uuid, task_name):
+    tasks = find_tasks_by_name(tasks_by_uuid, task_name)
+    if not tasks:
+        return None
+    return tasks[0]
+
+
+def _is_task_complete(tasks_by_uuid, task_name):
+    named_task = find_task_by_name(tasks_by_uuid, task_name)
+    if named_task:
+        return named_task.get('state') in COMPLETE_STATES
+    return False
+
+
+class FlameSocketIoTaskQueryTest(FlameFlowTestConfiguration):
+    """ Uses Flame's SocketIO API to revoke a run. """
+
+    # Don't run with --sync, since this test will revoke the incomplete root task.
+    sync = False
+    no_coverage = True
+
+    def initial_firex_options(self) -> list:
+        # Sleep so that assert_on_flame_url can call revoke while the run is incomplete.
+        return ["submit", "--chain", 'WaitingParent']
+
+    def assert_on_flame_url(self, log_dir, flame_url):
+        wait_until_web_request_ok(urllib.parse.urljoin(flame_url, '/alive'), timeout=10, sleep_for=1)
+        Path(log_dir, 'wait_file').touch()
+
+        sio_client = socketio.Client()
+        client_tasks_by_uuid = {}
+
+        @sio_client.on('tasks-query-update')
+        def revoke_success(update_by_uuid):
+            client_tasks_by_uuid.update(deep_merge(client_tasks_by_uuid, update_by_uuid))
+
+        sio_client.connect(flame_url)
+        sio_client.emit('start-listen-task-query', data={'query_config': TEST_TASK_QUERY})
+
+        wait_until(_is_task_complete, 30, 1, client_tasks_by_uuid, 'WaitingParent')
+        sio_client.disconnect()
+
+        assert find_task_by_name(client_tasks_by_uuid, 'WaitingParent'), "Could not find WaitingParent"
 
 
 class FlameRedisKillCleanupTest(FlameFlowTestConfiguration):

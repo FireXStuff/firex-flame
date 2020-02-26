@@ -5,7 +5,7 @@ from pathlib import Path
 import tarfile
 
 from firex_flame.event_aggregator import slim_tasks_by_uuid, COMPLETE_STATES
-from firex_flame.flame_helper import get_flame_debug_dir, query_tasks
+from firex_flame.flame_helper import get_flame_debug_dir, query_full_tasks
 
 logger = logging.getLogger(__name__)
 
@@ -166,10 +166,11 @@ class FlameModelDumper:
 
             file_basename = representation_data['model_file_name']
             out_file = os.path.join(self.root_model_dir, file_basename)
-            queried_tasks = query_tasks(tasks_by_uuid, representation_data['task_queries'], tasks_by_uuid)
+            queried_tasks = query_full_tasks(tasks_by_uuid, representation_data['task_queries'])
             _write_json(out_file, queried_tasks)
         except Exception as e:
             # Don't interfere with shutdown even if extra representation dumping fails.
-            logger.error(f"Failed to dump representation of {representation_file}: {e}")
+            logger.error(f"Failed to dump representation of {representation_file}.")
+            logger.exception(e)
         else:
             logger.info(f"Finished dumping task representation in: {representation_file}.")

@@ -189,6 +189,10 @@ def _validate_task_queries(task_representation):
     return True
 
 
+def _normalize_criteria_key(k):
+    return k[1:] if k.startswith('?') else k
+
+
 def task_matches_criteria(task: dict, criteria: dict):
     if criteria['type'] == 'all':
         return True
@@ -202,16 +206,16 @@ def task_matches_criteria(task: dict, criteria: dict):
         criteria_val = criteria['value']
         # TODO: if more adjusting qualifiers are added, this needs to be reworked.
         required_keys = {k for k in criteria_val.keys() if not k.startswith('?')}
-        optional_keys = {k[1:] for k in criteria_val.keys() if k.startswith('?')}
+        optional_keys = {_normalize_criteria_key(k) for k in criteria_val.keys() if k.startswith('?')}
 
         present_required_keys = required_keys.intersection(task.keys())
         if len(required_keys) != len(present_required_keys):
             return False
 
         present_optional_keys = optional_keys.intersection(task.keys())
-
+        normalized_criteria = {_normalize_criteria_key(k): v for k, v in criteria_val.items()}
         for k in present_required_keys.union(present_optional_keys):
-            if task[k] != criteria_val[k]:
+            if task[k] != normalized_criteria[k]:
                 return False
 
         return True
@@ -297,30 +301,79 @@ def flatten(l):
     return [item for sublist in l for item in sublist]
 
 
-def select_data_for_matches(task, task_queries, all_tasks_by_uuid):
-    result_task = {}
-    always_select_fields = flatten([q.get('selectPaths', []) for q in task_queries
-                                    if q['matchCriteria']['type'] == 'always-select-fields'])
+def get_always_select_fields(task_queries):
+    return flatten([q.get('selectPaths', []) for q in task_queries
+                    if q['matchCriteria']['type'] == 'always-select-fields'])
+
+
+def select_ancestor_of_task_descendant_match(uuid, query, select_paths, all_tasks_by_uuid):
+    # Should the current task be included in the result because it matches some descendant criteria?
+    matching_criteria = [criteria for criteria in query.get('selectDescendants', [])
+                         if task_matches_criteria(all_tasks_by_uuid[uuid], criteria)]
+    if matching_criteria:
+        # The current task matches some descendant criteria. Confirm that some ancestor matches the top-level
+        # criteria.
+        ancestor = next((a for a in get_ancestors(uuid, all_tasks_by_uuid)
+                         if task_matches_criteria(a, query['matchCriteria'])), None)
+        if ancestor:
+            # The current task and its ancestor should be included in the result.
+            return ancestor['uuid'], select_from_task(select_paths, matching_criteria, ancestor, all_tasks_by_uuid)
+    return None, {}
+
+
+def select_data_for_matches(task_uuid, task_queries, all_tasks_by_uuid, match_descendant_criteria):
+    result_tasks_by_uuid = {}
+    always_select_fields = get_always_select_fields(task_queries)
     for query in task_queries:
-        is_match = task_matches_criteria(task, query['matchCriteria'])
-        if is_match:
-            update_dict = select_from_task(always_select_fields + query.get('selectPaths', []),
-                                           query.get('selectDescendants', []),
-                                           task,
-                                           all_tasks_by_uuid,
-                                           )
-            result_task = deep_merge(result_task, update_dict)
-    return result_task
+        matches_criteria = task_matches_criteria(all_tasks_by_uuid[task_uuid], query['matchCriteria'])
+        select_paths = always_select_fields + query.get('selectPaths', [])
+        updates_by_uuid = {}
+        if matches_criteria:
+            updates_by_uuid[task_uuid] = select_from_task(select_paths,
+                                                          query.get('selectDescendants', []),
+                                                          all_tasks_by_uuid[task_uuid],
+                                                          all_tasks_by_uuid)
+
+        if match_descendant_criteria:
+            uuid, task_update = select_ancestor_of_task_descendant_match(task_uuid, query, select_paths, all_tasks_by_uuid)
+            if uuid:
+                updates_by_uuid[uuid] = task_update
+
+        if updates_by_uuid:
+            result_tasks_by_uuid = deep_merge(result_tasks_by_uuid, updates_by_uuid)
+
+    return result_tasks_by_uuid
 
 
-def query_tasks(tasks_by_uuid_to_query, task_queries, all_tasks_by_uuid):
+def _query_tasks(task_uuids_to_query, task_queries, all_tasks_by_uuid, match_descendant_criteria):
     if not _validate_task_queries(task_queries):
         return {}
 
     result_tasks_by_uuid = {}
-    for id, task in tasks_by_uuid_to_query.items():
-        result_task = select_data_for_matches(task, task_queries, all_tasks_by_uuid)
-        if result_task:
-            result_tasks_by_uuid[id] = result_task
+    for uuid in task_uuids_to_query:
+        selected_tasks_by_uuid = select_data_for_matches(uuid, task_queries, all_tasks_by_uuid, match_descendant_criteria)
+        result_tasks_by_uuid = deep_merge(result_tasks_by_uuid, selected_tasks_by_uuid)
 
     return result_tasks_by_uuid
+
+
+def query_full_tasks(all_tasks_by_uuid, task_queries):
+    # When querying a full set of tasks, descendants will be included when their ancestors are matched.
+    return _query_tasks(all_tasks_by_uuid.keys(), task_queries, all_tasks_by_uuid, match_descendant_criteria=False)
+
+
+def query_partial_tasks(task_uuids_to_query, task_queries, all_tasks_by_uuid):
+    # When querying a partial set of tasks, count descendants as matches to be
+    return _query_tasks(task_uuids_to_query, task_queries, all_tasks_by_uuid, match_descendant_criteria=True)
+
+
+def get_ancestors(uuid, all_tasks_by_uuid):
+    parent_uuid = all_tasks_by_uuid[uuid]['parent_id']
+    while parent_uuid:
+        yield all_tasks_by_uuid[parent_uuid]
+        parent_uuid = all_tasks_by_uuid.get(parent_uuid, {'parent_id': None})['parent_id']
+
+
+def get_dict_json_md5(query_config):
+    import hashlib
+    return hashlib.md5(json.dumps(query_config, sort_keys=True).encode('utf-8')).hexdigest()

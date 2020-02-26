@@ -121,4 +121,4 @@ class BrokerEventConsumerThread(threading.Thread):
 
     def _aggregate_and_send(self, events):
         new_data_by_task_uuid = self.event_aggregator.aggregate_events(events)
-        self.flame_controller.send_slim_event(new_data_by_task_uuid)
+        self.flame_controller.send_sio_event(new_data_by_task_uuid, self.event_aggregator.tasks_by_uuid)

@@ -5,14 +5,12 @@ Flask API module for interacting with celery tasks.
 import logging
 
 from flask import jsonify
+from gevent import spawn, sleep
+import paramiko
 
-from firex_flame.flame_helper import wait_until
-
+from firex_flame.flame_helper import wait_until, query_full_tasks
 from firex_flame.event_aggregator import slim_tasks_by_uuid, INCOMPLETE_STATES
 
-from gevent import spawn, sleep
-
-import paramiko
 
 logger = logging.getLogger(__name__)
 
@@ -158,27 +156,35 @@ def term_all_subprocs():
     for sid in subprocess_dict:
         term_subproc(sid)
 
+def get_dict_json_md5(input_dict):
+    # TODO: md5 json string (sort keys)
+    return ''
 
-def create_socketio_task_api(sio_server, event_aggregator, run_metadata):
 
-    @sio_server.on('send-graph-state')
-    def emit_frontend_tasks_by_uuid(sid):
+def create_socketio_task_api(controller, event_aggregator, run_metadata):
+
+    @controller.sio_server.on('send-graph-state')
+    def emit_frontend_tasks_by_uuid(sid, data=None):
         """ Send 'slim' fields for all tasks. This allows visualization of the graph."""
-        sio_server.emit('graph-state', slim_tasks_by_uuid(event_aggregator.tasks_by_uuid), room=sid)
+        if data and 'task_queries' in data:
+            tasks_to_send = query_full_tasks(event_aggregator.tasks_by_uuid, data['task_queries'])
+        else:
+            tasks_to_send = slim_tasks_by_uuid(event_aggregator.tasks_by_uuid)
+        controller.sio_server.emit('graph-state', tasks_to_send, room=sid)
 
-    @sio_server.on('send-graph-fields')
+    @controller.sio_server.on('send-graph-fields')
     def emit_task_fields_by_uuid(sid, fields):
         """ Send the requested fields for all tasks."""
         response = _get_task_fields(event_aggregator.tasks_by_uuid, fields)
-        sio_server.emit('graph-fields', response, room=sid)
+        controller.sio_server.emit('graph-fields', response, room=sid)
 
-    @sio_server.on('send-run-metadata')
+    @controller.sio_server.on('send-run-metadata')
     def emit_run_metadata(sid):
         """ Get static run-level data."""
         response = _run_metadata_to_api_model(run_metadata, event_aggregator.root_uuid)
-        sio_server.emit('run-metadata', response, room=sid)
+        controller.sio_server.emit('run-metadata', response, room=sid)
 
-    @sio_server.on('send-task-details')
+    @controller.sio_server.on('send-task-details')
     def emit_detailed_tasks(sid, uuids):
         """ Get all fields for requested task UUIDs.
         Arguments:
@@ -188,26 +194,38 @@ def create_socketio_task_api(sio_server, event_aggregator, run_metadata):
         if isinstance(uuids, str):
             uuid = uuids
             response = event_aggregator.tasks_by_uuid.get(uuid, None)
-            sio_server.emit('task-details-' + uuid, response, room=sid)
+            controller.sio_server.emit('task-details-' + uuid, response, room=sid)
         else:
             if not isinstance(uuids, list):
                 response = []
             else:
                 response = [event_aggregator.tasks_by_uuid.get(u, None) for u in uuids]
-            sio_server.emit('task-details', response, room=sid)
+            controller.sio_server.emit('task-details', response, room=sid)
 
-    @sio_server.on('start-listen-file')
+    @controller.sio_server.on('start-listen-file')
     def start_file_monitor(sid, args):
         if 'host' not in args or 'filepath' not in args:
-            sio_server.emit('file-line',
-                            "File monitoring request is missing either host and/or filepath parameters: %s" % args,
-                            room=sid)
+            controller.sio_server.emit(
+                'file-line',
+                "File monitoring request is missing either host and/or filepath parameters: %s" % args,
+                room=sid)
         else:
-            spawn(monitor_file, sio_server=sio_server, sid=sid, host=args['host'], filename=args['filepath'])
+            spawn(monitor_file, sio_server=controller.sio_server, sid=sid, host=args['host'], filename=args['filepath'])
 
-    @sio_server.on('stop-listen-file')
+    @controller.sio_server.on('stop-listen-file')
     def stop_file_monitor(sid):
         term_subproc(sid)
+
+    @controller.sio_server.on('start-listen-task-query')
+    def start_listen_task_query(sid, args):
+        if 'query_config' not in args:
+            logger.error("Received request to start listening to query without config.")
+        else:
+            controller.add_client_task_query_config(sid, args['query_config'])
+
+    @controller.sio_server.on('disconnect')
+    def disconnect(sid):
+        controller.remove_client_task_query(sid)
 
 
 def create_rest_task_api(web_app, event_aggregator, run_metadata):
