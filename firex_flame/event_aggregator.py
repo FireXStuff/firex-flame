@@ -96,6 +96,11 @@ FIELD_CONFIG = {
         'copy_celery': True,
         'aggregate_merge': True,
     },
+    'additional_children': {
+        'copy_celery': True,
+        'aggregate_merge': True,
+        'slim_field': True,
+    },
 }
 
 

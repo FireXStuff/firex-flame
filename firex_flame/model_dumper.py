@@ -158,7 +158,7 @@ class FlameModelDumper:
         logger.info("Finished dumping complete Flame model.")
 
     def dump_task_representation(self, tasks_by_uuid, representation_file):
-        logger.info(f"Starting to dump task representation in: {representation_file}.")
+        logger.info(f"Starting to dump task representation of: {representation_file}.")
 
         try:
             with open(representation_file) as fp:
@@ -173,4 +173,4 @@ class FlameModelDumper:
             logger.error(f"Failed to dump representation of {representation_file}.")
             logger.exception(e)
         else:
-            logger.info(f"Finished dumping task representation in: {representation_file}.")
+            logger.info(f"Finished dumping task representation of: {representation_file}.")
