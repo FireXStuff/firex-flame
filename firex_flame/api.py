@@ -156,10 +156,6 @@ def term_all_subprocs():
     for sid in subprocess_dict:
         term_subproc(sid)
 
-def get_dict_json_md5(input_dict):
-    # TODO: md5 json string (sort keys)
-    return ''
-
 
 def create_socketio_task_api(controller, event_aggregator, run_metadata):
 
