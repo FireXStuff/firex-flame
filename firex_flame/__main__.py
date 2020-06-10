@@ -17,7 +17,7 @@ from threading import Timer
 
 from firex_flame.main_app import start_flame
 from firex_flame.flame_helper import get_flame_debug_dir, get_flame_pid_file_path, DEFAULT_FLAME_TIMEOUT, \
-    BrokerConsumerConfig
+    BrokerConsumerConfig, get_flame_url
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +66,7 @@ def _parse_args():
     return parser.parse_args()
 
 
-class ShutdownSignalHandler:
+class ShutdownHandler:
 
     def __init__(self):
         self.web_server = None
@@ -85,8 +85,10 @@ class ShutdownSignalHandler:
     def shutdown(self, reason):
         logging.info("Stopping entire Flame Server for reason: %s" % reason)
         # TODO: shutdowns that occur while the broker is still receiving events will not have the data model dumped,
-        # since that's currently exclusively the responsibility of the broker processor. This shutdown method
-        # should do a 'dump complete if not already dumped' and handle concurrency issues.
+        #  since that's currently exclusively the responsibility of the broker processor. This shutdown method
+        #  should do a 'dump complete if not already dumped' and handle concurrency issues, but only when a broker
+        #  is present (i.e. not when replaying a recording). Generating the dumped model while processing events
+        #  mitigates but does not eliminate this issue.
         logging.shutdown()
         if self.web_server:
             self.web_server.stop()
@@ -128,6 +130,7 @@ def _create_run_metadata(cli_args):
 
 
 def create_broker_processor_config(args):
+    assert args.broker or args.recording, "Must supply an event source: either a Broker or an existing recording file."
     return BrokerConsumerConfig(args.broker,
                                 args.broker_max_retry_attempts,
                                 args.broker_recv_ready_file,
@@ -143,7 +146,7 @@ class NoopTimer:
 
 
 def main():
-    shutdown_handler = ShutdownSignalHandler()
+    shutdown_handler = ShutdownHandler()
 
     args = _parse_args()
     _config_logging(args.logs_dir)
@@ -156,12 +159,13 @@ def main():
                                  args.extra_task_dump_paths.split(',') if args.extra_task_dump_paths else [])
         # Allow the shutdown handler to stop the web server before we serve_forever.
         shutdown_handler.web_server = web_server
+        print(f"Flame server running on: {get_flame_url(web_server.server_port)}")
         web_server.serve_forever()
-        t.cancel()
     except Exception as e:
         logger.exception(e)
         shutdown_handler.shutdown(str(e))
     finally:
+        t.cancel()
         logger.info("Flame server finished.")
 
 

@@ -39,7 +39,8 @@ def start_flame(webapp_port, broker_consumer_config, run_metadata, recording_fil
         celery_app = None
     event_recv_thread.start()
 
-    wait_until_path_exist(broker_consumer_config.receiver_ready_file, sleep_for=0.1)
+    if broker_consumer_config.receiver_ready_file:
+        wait_until_path_exist(broker_consumer_config.receiver_ready_file, sleep_for=0.1)
 
     # Delaying of importing of all web dependencies is a deliberate startup performance optimization.
     # The broker should be listening for events as quickly as possible.

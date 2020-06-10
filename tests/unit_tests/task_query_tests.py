@@ -127,7 +127,6 @@ class TaskQueryTests(unittest.TestCase):
         }
 
         result = query_partial_tasks(['3'], queries, all_tasks)
-        print(result)
 
         self.assertEqual(result, {
             # '2' is included because it selects 3 as a descendant.
