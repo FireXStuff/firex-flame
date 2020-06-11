@@ -129,8 +129,7 @@ def create_rel_symlink(existing_path, symlink, target_is_directory=False):
 
 class BrokerConsumerConfig:
 
-    def __init__(self, broker_url, max_retry_attempts, receiver_ready_file, terminate_on_complete):
-        self.broker_url = broker_url
+    def __init__(self, max_retry_attempts, receiver_ready_file, terminate_on_complete):
         self.max_retry_attempts = max_retry_attempts
         self.receiver_ready_file = receiver_ready_file
         self.terminate_on_complete = terminate_on_complete

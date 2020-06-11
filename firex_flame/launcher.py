@@ -22,7 +22,6 @@ def get_flame_args(uid, broker_recv_ready_file, args):
     # assemble startup cmd
     cmd_args = {
         'port': args.flame_port,
-        'broker': BrokerFactory.get_broker_url(),
         'uid': str(uid),
         'logs_dir': uid.logs_dir,
         'chain': args.chain,

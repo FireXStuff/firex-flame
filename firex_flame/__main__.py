@@ -28,6 +28,7 @@ def _parse_args():
     parser.add_argument('--uid', help='Unique identifier for the represented FireX run.')
     parser.add_argument('--logs_dir', help='Logs directory.', default=None, required=True)
     parser.add_argument('--chain', help='Chain of the run.', default=None)
+    # TODO: could validate either rec file exists or broker URL is legible from logs_dir is supplied.
     parser.add_argument('--recording', help='A file containing the recording of celery events.', default=None)
     parser.add_argument('--central_server', help='A central web server from which the UI and logs can be served.',
                         default=None)
@@ -40,8 +41,6 @@ def _parse_args():
                         default='http://www.firexapp.com/')
     parser.add_argument('--firex_bin_path', help='Path to a firex executable.',
                         default=None)
-    # TODO: could validate either rec file exists or broker is supplied.
-    parser.add_argument('--broker', help='Celery broker.', default=None)
     parser.add_argument('--flame_timeout', help='Maximum lifetime of this service, in seconds', type=int,
                         default=DEFAULT_FLAME_TIMEOUT)
     parser.add_argument('--broker_recv_ready_file', help='File to create immediately before capturing celery events.',
@@ -130,9 +129,7 @@ def _create_run_metadata(cli_args):
 
 
 def create_broker_processor_config(args):
-    assert args.broker or args.recording, "Must supply an event source: either a Broker or an existing recording file."
-    return BrokerConsumerConfig(args.broker,
-                                args.broker_max_retry_attempts,
+    return BrokerConsumerConfig(args.broker_max_retry_attempts,
                                 args.broker_recv_ready_file,
                                 args.terminate_on_complete)
 

@@ -3,6 +3,7 @@ import os
 from threading import Thread
 
 import celery
+from firexapp.broker_manager.broker_factory import RedisManager
 
 from firex_flame.controller import FlameAppController
 from firex_flame.event_file_processor import process_recording_file
@@ -14,16 +15,20 @@ logger = logging.getLogger(__name__)
 
 
 def create_broker_consumer_thread(broker_consumer_config, controller, event_aggregator,
-                                  recording_file, shutdown_handler):
-    assert broker_consumer_config.broker_url, "Since recording file doesn't exist, the broker is required."
-
-    celery_app = celery.Celery(broker=broker_consumer_config.broker_url)
-    return BrokerEventConsumerThread(celery_app,
-                                     controller,
-                                     event_aggregator,
-                                     broker_consumer_config,
-                                     recording_file,
-                                     shutdown_handler)
+                                  recording_file, shutdown_handler, logs_dir):
+    try:
+        broker_url = RedisManager.get_broker_url_from_metadata(logs_dir)
+    except:
+        logger.error(f"Failed to load broker URL from logs dir: {logs_dir}")
+        raise
+    else:
+        celery_app = celery.Celery(broker=broker_url)
+        return BrokerEventConsumerThread(celery_app,
+                                         controller,
+                                         event_aggregator,
+                                         broker_consumer_config,
+                                         recording_file,
+                                         shutdown_handler)
 
 
 def start_flame(webapp_port, broker_consumer_config, run_metadata, recording_file, shutdown_handler,
@@ -31,8 +36,8 @@ def start_flame(webapp_port, broker_consumer_config, run_metadata, recording_fil
     event_aggregator = FlameEventAggregator()
     controller = FlameAppController(run_metadata, extra_task_dump_paths)
     if not recording_file or not os.path.isfile(recording_file):
-        event_recv_thread = create_broker_consumer_thread(broker_consumer_config, controller,
-                                                          event_aggregator, recording_file, shutdown_handler)
+        event_recv_thread = create_broker_consumer_thread(broker_consumer_config, controller, event_aggregator,
+                                                          recording_file, shutdown_handler, run_metadata['logs_dir'])
         celery_app = event_recv_thread.celery_app
     else:
         event_recv_thread = Thread(target=process_recording_file, args=(event_aggregator, recording_file, run_metadata))
