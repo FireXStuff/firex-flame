@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def create_broker_consumer_thread(broker_consumer_config, controller, event_aggregator,
                                   recording_file, shutdown_handler, logs_dir):
     try:
-        broker_url = RedisManager.get_broker_url_from_metadata(logs_dir)
+        broker_url = RedisManager.get_broker_url_from_logs_dir(logs_dir)
     except:
         logger.error(f"Failed to load broker URL from logs dir: {logs_dir}")
         raise
