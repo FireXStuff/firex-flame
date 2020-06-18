@@ -5,12 +5,18 @@ from pathlib import Path
 import psutil
 import time
 import signal
-import sys
+from collections import namedtuple
 
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_FLAME_TIMEOUT = 60 * 60 * 24 * 2
+
+# This structure contains an index by UUID for both ancestors and descendants. This is memory inefficient,
+# but makes queries that would involve multiple graph traversals very fast.
+# TODO: If further performance enhancements are sought, this structure could be maintained during event receiving
+#  so that it isn't re-calculated per task query.
+FlameTaskGraph = namedtuple('FlameTaskGraph', ['tasks_by_uuid', 'ancestors_by_uuid', 'descendants_by_uuid'])
 
 
 def get_flame_debug_dir(root_logs_dir):
@@ -265,31 +271,31 @@ def _get_descendants(uuid, all_tasks_by_uuid):
     return descendants_by_uuid
 
 
-def _get_descendants_for_criteria(select_paths, descendant_criteria, ancestor_uuid, all_tasks_by_uuid):
-    ancestor_descendants_by_uuid = _get_descendants(ancestor_uuid, all_tasks_by_uuid)
+def _get_descendants_for_criteria(select_paths, descendant_criteria, ancestor_uuid, task_graph: FlameTaskGraph):
+    ancestor_descendants = task_graph.descendants_by_uuid[ancestor_uuid]
     matched_descendants_by_uuid = {}
     for criteria in descendant_criteria:
-        for uuid, descendant in ancestor_descendants_by_uuid.items():
+        for descendant in ancestor_descendants:
             if task_matches_criteria(descendant, criteria):
                 # Need no_descendants=True to prevent infinite loops.
                 # The fields that are selected for each descendant are determined by all queries, except
                 # descendant descendants are never included.
-                matched_descendants_by_uuid[uuid] = select_from_task(
+                matched_descendants_by_uuid[descendant['uuid']] = select_from_task(
                     select_paths,
                     [],  # Never include descendants in descendant queries to avoid infinite loop.
                     descendant,
-                    all_tasks_by_uuid)
+                    task_graph)
 
     return matched_descendants_by_uuid
 
 
-def select_from_task(select_paths, select_descendants, task, all_tasks_by_uuid):
+def select_from_task(select_paths, select_descendants, task, task_graph: FlameTaskGraph):
     selected_dict = {}
     paths_update_dict = _get_paths_from_task(select_paths, task)
     selected_dict.update(paths_update_dict)
 
     selected_descendants_by_uuid = _get_descendants_for_criteria(select_paths, select_descendants, task['uuid'],
-                                                                 all_tasks_by_uuid)
+                                                                 task_graph)
     if selected_descendants_by_uuid:
         selected_dict.update({'descendants': selected_descendants_by_uuid})
 
@@ -305,36 +311,77 @@ def get_always_select_fields(task_queries):
                     if q['matchCriteria']['type'] == 'always-select-fields'])
 
 
-def select_ancestor_of_task_descendant_match(uuid, query, select_paths, all_tasks_by_uuid):
+def select_ancestor_of_task_descendant_match(uuid, query, select_paths, task_graph: FlameTaskGraph):
     # Should the current task be included in the result because it matches some descendant criteria?
+    task = task_graph.tasks_by_uuid[uuid]
     matching_criteria = [criteria for criteria in query.get('selectDescendants', [])
-                         if task_matches_criteria(all_tasks_by_uuid[uuid], criteria)]
+                         if task_matches_criteria(task, criteria)]
     if matching_criteria:
         # The current task matches some descendant criteria. Confirm that some ancestor matches the top-level
         # criteria.
-        ancestor = next((a for a in get_ancestors(uuid, all_tasks_by_uuid)
+        ancestor = next((a for a in task_graph.ancestors_by_uuid[uuid]
                          if task_matches_criteria(a, query['matchCriteria'])), None)
         if ancestor:
             # The current task and its ancestor should be included in the result.
-            return ancestor['uuid'], select_from_task(select_paths, matching_criteria, ancestor, all_tasks_by_uuid)
+            return ancestor['uuid'], select_from_task(select_paths, matching_criteria, ancestor, task_graph)
     return None, {}
 
 
-def select_data_for_matches(task_uuid, task_queries, all_tasks_by_uuid, match_descendant_criteria):
+def _get_children_by_uuid(tasks_by_uuid):
+    children_by_uuid = {}
+    for u, t in tasks_by_uuid.items():
+        if u not in children_by_uuid:
+            # Ensure every UUID has an entry in the result, even UUIDs with no children.
+            children_by_uuid[u] = []
+        if t['parent_id'] is not None:
+            if t['parent_id'] not in children_by_uuid:
+                children_by_uuid[t['parent_id']] = []
+            children_by_uuid[t['parent_id']].append(t)
+    return children_by_uuid
+
+
+def _create_task_graph(tasks_by_uuid):
+    children_by_uuid = _get_children_by_uuid(tasks_by_uuid)
+    descendants_by_uuid = {}
+    ancestors_by_uuid = {}
+    root_task = next((t for t in tasks_by_uuid.values() if t['parent_id'] is None), None)
+    if root_task:
+        tasks_to_check = [root_task]
+        while tasks_to_check:
+            cur_task = tasks_to_check.pop()
+
+            # The task tree is being walked top-down, so it's safe to expect ancestors to be populated.
+            if cur_task['parent_id'] is None or cur_task['parent_id'] not in ancestors_by_uuid:
+                ancestors = []
+            else:
+                # This task's ancestors are its parent's ancestors plus its parent.
+                parent_task = tasks_by_uuid[cur_task['parent_id']]
+                ancestors = ancestors_by_uuid[cur_task['parent_id']] + [parent_task]
+            ancestors_by_uuid[cur_task['uuid']] = ancestors
+
+            descendants_by_uuid[cur_task['uuid']] = []
+            for a in ancestors:
+                descendants_by_uuid[a['uuid']].append(cur_task)
+
+            tasks_to_check.extend(children_by_uuid[cur_task['uuid']])
+
+    return FlameTaskGraph(tasks_by_uuid, ancestors_by_uuid, descendants_by_uuid)
+
+
+def select_data_for_matches(task_uuid, task_queries, task_graph: FlameTaskGraph, match_descendant_criteria):
     result_tasks_by_uuid = {}
     always_select_fields = get_always_select_fields(task_queries)
     for query in task_queries:
-        matches_criteria = task_matches_criteria(all_tasks_by_uuid[task_uuid], query['matchCriteria'])
+        task = task_graph.tasks_by_uuid[task_uuid]
+        matches_criteria = task_matches_criteria(task, query['matchCriteria'])
         select_paths = always_select_fields + query.get('selectPaths', [])
         updates_by_uuid = {}
         if matches_criteria:
-            updates_by_uuid[task_uuid] = select_from_task(select_paths,
-                                                          query.get('selectDescendants', []),
-                                                          all_tasks_by_uuid[task_uuid],
-                                                          all_tasks_by_uuid)
+            updates_by_uuid[task_uuid] = select_from_task(select_paths, query.get('selectDescendants', []), task,
+                                                          task_graph)
 
         if match_descendant_criteria:
-            uuid, task_update = select_ancestor_of_task_descendant_match(task_uuid, query, select_paths, all_tasks_by_uuid)
+            uuid, task_update = select_ancestor_of_task_descendant_match(task_uuid, query, select_paths, task_graph)
             if uuid:
                 updates_by_uuid[uuid] = task_update
 
@@ -344,13 +391,14 @@ def select_data_for_matches(task_uuid, task_queries, all_tasks_by_uuid, match_de
     return result_tasks_by_uuid
 
 
-def _query_tasks(task_uuids_to_query, task_queries, all_tasks_by_uuid, match_descendant_criteria):
+def _query_flame_tasks(task_uuids_to_query, task_queries, all_tasks_by_uuid, match_descendant_criteria):
     if not _validate_task_queries(task_queries):
         return {}
 
+    task_graph = _create_task_graph(all_tasks_by_uuid)
     result_tasks_by_uuid = {}
     for uuid in task_uuids_to_query:
-        selected_tasks_by_uuid = select_data_for_matches(uuid, task_queries, all_tasks_by_uuid, match_descendant_criteria)
+        selected_tasks_by_uuid = select_data_for_matches(uuid, task_queries, task_graph, match_descendant_criteria)
         result_tasks_by_uuid = deep_merge(result_tasks_by_uuid, selected_tasks_by_uuid)
 
     return result_tasks_by_uuid
@@ -358,19 +406,13 @@ def _query_tasks(task_uuids_to_query, task_queries, all_tasks_by_uuid, match_des
 
 def query_full_tasks(all_tasks_by_uuid, task_queries):
     # When querying a full set of tasks, descendants will be included when their ancestors are matched.
-    return _query_tasks(all_tasks_by_uuid.keys(), task_queries, all_tasks_by_uuid, match_descendant_criteria=False)
+    return _query_flame_tasks(all_tasks_by_uuid.keys(), task_queries, all_tasks_by_uuid,
+                              match_descendant_criteria=False)
 
 
 def query_partial_tasks(task_uuids_to_query, task_queries, all_tasks_by_uuid):
-    # When querying a partial set of tasks, count descendants as matches to be
-    return _query_tasks(task_uuids_to_query, task_queries, all_tasks_by_uuid, match_descendant_criteria=True)
-
-
-def get_ancestors(uuid, all_tasks_by_uuid):
-    parent_uuid = all_tasks_by_uuid[uuid]['parent_id']
-    while parent_uuid:
-        yield all_tasks_by_uuid[parent_uuid]
-        parent_uuid = all_tasks_by_uuid.get(parent_uuid, {'parent_id': None})['parent_id']
+    # When querying a partial set of tasks, count descendants as matches to be included in the result.
+    return _query_flame_tasks(task_uuids_to_query, task_queries, all_tasks_by_uuid, match_descendant_criteria=True)
 
 
 def get_dict_json_md5(query_config):
