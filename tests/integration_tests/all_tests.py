@@ -438,10 +438,9 @@ class DumpDataOnCompleteTest(FlameFlowTestConfiguration):
 
         query = {
             ('state',): 'task-succeeded',
-            # TODO: add additional criteria when these fields are ported from firex legacy.
-            # ('firex_bound_args', 'op1'): '1',
-            # ('firex_bound_args', 'op2'): '2',
-            # ('firex_result', 'sum'): 3,
+            ('firex_bound_args', 'op1'): '1',
+            ('firex_bound_args', 'op2'): '2',
+            ('firex_result', 'sum'): 3,
         }
 
         found_paths = filter_paths(tasks_by_name, query)['add']
