@@ -101,6 +101,10 @@ FIELD_CONFIG = {
         'aggregate_merge': True,
         'slim_field': True,
     },
+    'error_context': {
+        'copy_celery': True,
+        'slim_field': True,
+    },
 }
 
 
