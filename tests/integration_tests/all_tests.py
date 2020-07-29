@@ -22,7 +22,7 @@ from firex_flame.flame_helper import get_flame_pid, wait_until_pid_not_exist, wa
     kill_flame, kill_and_wait, json_file_fn, wait_until_path_exist, deep_merge, wait_until_web_request_ok
 from firex_flame.event_aggregator import INCOMPLETE_STATES, COMPLETE_STATES
 from firex_flame.model_dumper import get_tasks_slim_file, get_model_full_tasks_by_names, is_dump_complete, \
-    get_run_metadata_file, get_flame_url, find_flame_model_dir
+    get_run_metadata_file, get_flame_url, find_flame_model_dir, load_task_representation
 
 
 test_data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
@@ -326,7 +326,6 @@ def _is_task_complete(tasks_by_uuid, task_name):
         return named_task.get('state') in COMPLETE_STATES
     return False
 
-
 class FlameSocketIoTaskQueryTest(FlameFlowTestConfiguration):
     """ Uses Flame's SocketIO API to revoke a run. """
 
@@ -340,13 +339,26 @@ class FlameSocketIoTaskQueryTest(FlameFlowTestConfiguration):
 
     def assert_on_flame_url(self, log_dir, flame_url):
         wait_until_web_request_ok(urllib.parse.urljoin(flame_url, '/alive'), timeout=10, sleep_for=1)
+
+        with tempfile.NamedTemporaryFile(mode='w') as temp:
+            rep_file_data = {'model_file_name': 'fake-filename.json', 'task_queries': TEST_TASK_QUERY}
+            temp.write(json.dumps(rep_file_data, sort_keys=True, indent=2))
+            temp.flush()
+
+            def does_waiting_parent_exist():
+                return find_task_by_name(load_task_representation(log_dir, temp.name), 'WaitingParent')
+
+            task = wait_until(does_waiting_parent_exist, 10, 1)
+            assert task, "Could not find WaitingParent"
+            assert task.get('state') in INCOMPLETE_STATES, f"Task not in an incomplete stat: {task.get('state')}"
+
         Path(log_dir, 'wait_file').touch()
 
         sio_client = socketio.Client()
         client_tasks_by_uuid = {}
 
         @sio_client.on('tasks-query-update')
-        def revoke_success(update_by_uuid):
+        def _(update_by_uuid):
             client_tasks_by_uuid.update(deep_merge(client_tasks_by_uuid, update_by_uuid))
 
         sio_client.connect(flame_url)
@@ -475,6 +487,25 @@ class DumpExtraRepDataOnCompleteTest(FlameFlowTestConfiguration):
         dump_complete = wait_until(is_dump_complete, 5, 0.1, log_dir)
         assert dump_complete, "Model dump not complete, can't assert on task data."
 
+        dumped_file_data = load_task_representation(log_dir, test_query_file)
+
+        assert len(dumped_file_data) == 1
+        single_task = list(dumped_file_data.values())[0]
+        assert single_task['name'] == 'Parent'
+        assert len(single_task['descendants']) == 1
+        assert list(single_task['descendants'].values())[0]['name'] == 'GrandChild'
+
+
+class QuertyLiveExtraRepData(FlameFlowTestConfiguration):
+    """ Tests task data model dumping of flame_extra_task_dump_paths is performed. """
+
+    def initial_firex_options(self) -> list:
+        return ["submit", "--chain", 'Parent', "--flame_extra_task_dump_paths", test_query_file]
+
+    def assert_on_flame_url(self, log_dir, flame_url):
+        dump_complete = wait_until(is_dump_complete, 5, 0.1, log_dir)
+        assert dump_complete, "Model dump not complete, can't assert on task data."
+
         extra_dump_file_basename = json.loads(Path(test_query_file).read_text())['model_file_name']
         dumped_file = os.path.join(find_flame_model_dir(log_dir), extra_dump_file_basename)
         dumped_file_data = json.loads(Path(dumped_file).read_text())
@@ -484,7 +515,6 @@ class DumpExtraRepDataOnCompleteTest(FlameFlowTestConfiguration):
         assert single_task['name'] == 'Parent'
         assert len(single_task['descendants']) == 1
         assert list(single_task['descendants'].values())[0]['name'] == 'GrandChild'
-
 
 class FlameLiveMonitorFile(FlameFlowTestConfiguration):
     """ Uses Flame's SocketIO API to revoke a run. """

@@ -67,6 +67,48 @@ def load_slim_tasks(log_dir):
     return json.loads(Path(get_tasks_slim_file(log_dir)).read_text())
 
 
+def socketio_client_task_queries_request(flame_url, task_queries):
+    import socketio
+    sio_client = socketio.Client()
+    sio_client.connect(flame_url)
+    try:
+        resp = {'tasks_by_uuid': None}
+        @sio_client.on('graph-state')
+        def my_event(data):
+            resp['tasks_by_uuid'] = data
+
+        sio_client.call('send-graph-state', {'task_queries': task_queries})
+        assert resp['tasks_by_uuid'] is not None
+    finally:
+        sio_client.disconnect()
+
+    return resp['tasks_by_uuid']
+
+
+def load_task_representation(firex_logs_dir, representation_file, consider_running=False):
+    with open(representation_file) as fp:
+            representation_data = json.load(fp)
+
+    task_rep_file = os.path.join(_get_base_model_dir(firex_logs_dir=firex_logs_dir),
+                                 representation_data['model_file_name'])
+    # TODO: this assumes the representation file is only present once it's complete!
+    #   If dumping is moved to occur during event reception, this will need to consider run_metadata.is_complete.
+    if os.path.isfile(task_rep_file):
+        # If file has already been dumped, just load it.
+        with open(task_rep_file) as fp:
+            return json.load(fp)
+    elif consider_running:
+        # If file hasn't been dumped, try to query a running flame server.
+        run_metadata_file = get_run_metadata_file(firex_logs_dir=firex_logs_dir)
+        if os.path.isfile(run_metadata_file):
+            with open(run_metadata_file) as fp:
+                run_metadata = json.load(fp)
+            return socketio_client_task_queries_request(run_metadata['flame_url'],
+                                                        representation_data['task_queries'])
+
+    return None
+
+
 def load_full_task(log_dir, task_uuid):
     return json.loads(Path(get_all_tasks_dir(firex_logs_dir=log_dir), task_uuid + '.json').read_text())
 
