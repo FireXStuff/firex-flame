@@ -346,7 +346,8 @@ class FlameSocketIoTaskQueryTest(FlameFlowTestConfiguration):
             temp.flush()
 
             def does_waiting_parent_exist():
-                return find_task_by_name(load_task_representation(log_dir, temp.name), 'WaitingParent')
+                return find_task_by_name(load_task_representation(log_dir, temp.name, consider_running=True),
+                                         'WaitingParent')
 
             task = wait_until(does_waiting_parent_exist, 10, 1)
             assert task, "Could not find WaitingParent"

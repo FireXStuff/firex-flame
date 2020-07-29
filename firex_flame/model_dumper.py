@@ -91,7 +91,7 @@ def load_task_representation(firex_logs_dir, representation_file, consider_runni
 
     task_rep_file = os.path.join(_get_base_model_dir(firex_logs_dir=firex_logs_dir),
                                  representation_data['model_file_name'])
-    # TODO: this assumes the representation file is only present once it's complete!
+    # TODO: this assumes the task representation file is only present once it's complete!
     #   If dumping is moved to occur during event reception, this will need to consider run_metadata.is_complete.
     if os.path.isfile(task_rep_file):
         # If file has already been dumped, just load it.
