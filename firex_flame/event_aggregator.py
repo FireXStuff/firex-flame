@@ -41,7 +41,7 @@ FIELD_CONFIG = {
         'copy_celery': True,
         'transform_celery': lambda e: {
             'state': e['type'],
-            'states': [{'state': e['type'], 'timestamp': e.get('timestamp', None)}],
+            'states': [{'state': e['type'], 'timestamp': e.get('local_received', None)}],
         } if e['type'] in STATE_TYPES else {},
     },
     'retries': {'copy_celery': True, 'slim_field': True},
