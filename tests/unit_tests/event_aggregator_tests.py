@@ -2,12 +2,13 @@ import unittest
 
 from firex_flame.event_aggregator import FlameEventAggregator
 
-basic_event = {'uuid': '1', 'long_name': 'prefix.SomeTask', 'type': 'task-started', 'timestamp': 0}
+basic_event = {'uuid': '1', 'long_name': 'prefix.SomeTask', 'type': 'task-started', 'local_received': 0}
 basic_event_added_fields = {
             'state': basic_event['type'],
             'task_num': 1,
             'name': 'SomeTask',
-            'states': [{'state': basic_event['type'], 'timestamp': basic_event['timestamp']}],
+            'first_started': basic_event['local_received'],
+            'states': [{'state': basic_event['type'], 'timestamp': basic_event['local_received']}],
         }
 
 
@@ -19,7 +20,7 @@ class EventAggregatorTests(unittest.TestCase):
         aggregator.aggregate_events([basic_event])
 
         expected_task = {**basic_event, **basic_event_added_fields}
-        expected_task.pop('timestamp')
+        expected_task.pop('local_received')
         self.assertEqual({expected_task['uuid']: expected_task}, aggregator.tasks_by_uuid)
 
     def test_ignore_missing_uuid(self):
@@ -68,15 +69,15 @@ class EventAggregatorTests(unittest.TestCase):
         event1 = dict(basic_event)
         events = [
             event1,
-            {'uuid': event1['uuid'], 'type': 'task-blocked', 'timestamp': 1},
-            {'uuid': event1['uuid'], 'type': 'task-started', 'timestamp': 2},
-            {'uuid': event1['uuid'], 'type': 'task-succeeded', 'timestamp': 3},
+            {'uuid': event1['uuid'], 'type': 'task-blocked', 'local_received': 1},
+            {'uuid': event1['uuid'], 'type': 'task-started', 'local_received': 2},
+            {'uuid': event1['uuid'], 'type': 'task-succeeded', 'local_received': 3},
         ]
 
         aggregator.aggregate_events(events)
 
         aggregated_states = aggregator.tasks_by_uuid[event1['uuid']]['states']
-        expected_states = [{'state': e['type'], 'timestamp': e['timestamp']} for e in events]
+        expected_states = [{'state': e['type'], 'timestamp': e['local_received']} for e in events]
         self.assertEqual(expected_states, aggregated_states)
 
     def test_capture_root(self):
@@ -93,13 +94,13 @@ class EventAggregatorTests(unittest.TestCase):
 
         event2 = {**basic_event,
                   'type': 'task-blocked',
-                  'timestamp': 1,
+                  'local_received': 1,
                   }
 
         aggregator.aggregate_events([basic_event, event2])
         expected_states = [
-            {'state': basic_event['type'], 'timestamp': basic_event['timestamp']},
-            {'state': event2['type'], 'timestamp': event2['timestamp']},
+            {'state': basic_event['type'], 'timestamp': basic_event['local_received']},
+            {'state': event2['type'], 'timestamp': event2['local_received']},
         ]
         self.assertEqual(expected_states, aggregator.tasks_by_uuid[basic_event['uuid']]['states'])
 
