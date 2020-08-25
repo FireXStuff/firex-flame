@@ -71,6 +71,8 @@ class ShutdownHandler:
         self.web_server = None
         signal.signal(signal.SIGTERM, self.sigterm_handler)
         signal.signal(signal.SIGINT, self.sigint_handler)
+        signal.signal(signal.SIGHUP,
+                      lambda _, __: logger.warning("Ignoring SIGHUP signal -- will timeout with broker."))
 
     def sigterm_handler(self, _, __):
         self.shutdown('SIGTERM detected')
