@@ -48,7 +48,7 @@ def dumper_main():
     FlameModelDumper(root_model_dir=args.dest_dir).dump_aggregator_complete_data_model(aggregator)
 
 
-def get_tasks_from_rec_file(log_dir=None, rec_filepath=None):
+def get_tasks_from_rec_file(log_dir=None, rec_filepath=None, mark_incomplete=False):
     assert bool(log_dir) ^ bool(rec_filepath), "Need exclusively either log directory of rec_file path."
     if not rec_filepath:
         rec_file = find_rec_file(log_dir)
@@ -57,6 +57,9 @@ def get_tasks_from_rec_file(log_dir=None, rec_filepath=None):
     assert os.path.exists(rec_file), "Recording file not found: %s" % rec_file
     aggregator = FlameEventAggregator()
     process_recording_file(aggregator, rec_file, {})
+
+    if mark_incomplete:
+        aggregator.aggregate_events(aggregator.generate_incomplete_events())
 
     return aggregator.tasks_by_uuid, aggregator.root_uuid
 

@@ -152,7 +152,7 @@ class FlameModelDumper:
     def dump_metadata(self, run_metadata, root_complete, flame_complete):
         metadata_model_file = get_run_metadata_file(root_model_dir=self.root_model_dir)
         complete = {'run_complete': root_complete, 'flame_recv_complete': flame_complete}
-        _write_json(metadata_model_file, {**complete, **run_metadata})
+        _write_json(metadata_model_file, {**run_metadata, **complete})
         return metadata_model_file
 
     def dump_aggregator_complete_data_model(self, event_aggregator, run_metadata=None, extra_task_representations=None):
@@ -172,7 +172,7 @@ class FlameModelDumper:
                 root_uuid = min(tasks_with_null_parent, key=lambda t: t['task_num'])
 
         full_tasks_dir = get_all_tasks_dir(root_model_dir=self.root_model_dir)
-        os.makedirs(full_tasks_dir)
+        os.makedirs(full_tasks_dir, exist_ok=True)
 
         # Write JSON file with minimum amount of info to render graph.
         slim_tasks_file = get_tasks_slim_file(root_model_dir=self.root_model_dir)
