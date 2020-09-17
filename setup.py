@@ -30,7 +30,6 @@ setup(name='firex_flame',
             "paramiko",
             "gevent-websocket",
             "gevent",
-            "vine==1.3.0",  # 5.0.0 breaks /celery/__init__.py module load.
       ],
       package_data={
         'firex_flame': ['templates/*.html'],
