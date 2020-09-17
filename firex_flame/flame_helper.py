@@ -333,10 +333,15 @@ def _get_children_by_uuid(tasks_by_uuid):
         if u not in children_by_uuid:
             # Ensure every UUID has an entry in the result, even UUIDs with no children.
             children_by_uuid[u] = []
-        if t['parent_id'] is not None:
-            if t['parent_id'] not in children_by_uuid:
-                children_by_uuid[t['parent_id']] = []
-            children_by_uuid[t['parent_id']].append(t)
+
+        # TODO: consider handling tasks with no 'parent_id' differently from tasks with None 'parent_id',
+        #   since the latter case is the root task and the former seems inexplicable.
+        parent_id = t.get('parent_id')
+        if parent_id is not None:
+            if parent_id not in children_by_uuid:
+                children_by_uuid[parent_id] = []
+            children_by_uuid[parent_id].append(t)
+
     return children_by_uuid
 
 
