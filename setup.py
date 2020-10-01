@@ -30,8 +30,9 @@ setup(name='firex_flame',
             "paramiko",
             "gevent-websocket",
             "gevent",
-            # Without pinning, 3.0.0 causes:
+            # Without pinning, importlib 3.0.0 causes:
             #     IsADirectoryError: [Errno 21] Is a directory: '/<path>/site-packages/firex_flame_ui'
+            "importlib-metadata==1.6.0",
             "importlib-resources==1.0.2",
       ],
       package_data={
