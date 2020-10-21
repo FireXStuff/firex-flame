@@ -7,6 +7,8 @@ import time
 import signal
 from collections import namedtuple
 
+from firexapp.events.model import ADDITIONAL_CHILDREN_KEY
+
 
 logger = logging.getLogger(__name__)
 
@@ -347,29 +349,43 @@ def _get_children_by_uuid(tasks_by_uuid):
 
 def _create_task_graph(tasks_by_uuid):
     children_by_uuid = _get_children_by_uuid(tasks_by_uuid)
-    descendants_by_uuid = {}
-    ancestors_by_uuid = {}
+    descendant_uuids_by_uuid = {}
+    ancestor_uuids_by_uuid = {}
     root_task = next((t for t in tasks_by_uuid.values() if t['parent_id'] is None), None)
     if root_task:
         tasks_to_check = [root_task]
         while tasks_to_check:
             cur_task = tasks_to_check.pop()
 
+            if cur_task['uuid'] not in ancestor_uuids_by_uuid:
+                ancestor_uuids_by_uuid[cur_task['uuid']] = set()
+            cur_task_ancestor_uuids = ancestor_uuids_by_uuid[cur_task['uuid']]
+
             # The task tree is being walked top-down, so it's safe to expect ancestors to be populated.
-            if cur_task['parent_id'] is None or cur_task['parent_id'] not in ancestors_by_uuid:
-                ancestors = []
-            else:
+            if cur_task.get('parent_id') is not None and cur_task['parent_id'] in ancestor_uuids_by_uuid:
                 # This task's ancestors are its parent's ancestors plus its parent.
-                parent_task = tasks_by_uuid[cur_task['parent_id']]
-                ancestors = ancestors_by_uuid[cur_task['parent_id']] + [parent_task]
-            ancestors_by_uuid[cur_task['uuid']] = ancestors
+                ancestor_uuids = ancestor_uuids_by_uuid[cur_task['parent_id']].union([cur_task['parent_id']])
+                cur_task_ancestor_uuids.update(ancestor_uuids)
 
-            descendants_by_uuid[cur_task['uuid']] = []
-            for a in ancestors:
-                descendants_by_uuid[a['uuid']].append(cur_task)
+            # Update ancestors of additional children.
+            additional_children_uuids = cur_task.get(ADDITIONAL_CHILDREN_KEY, [])
+            for additional_child_uuid in additional_children_uuids:
+                if additional_child_uuid not in ancestor_uuids_by_uuid:
+                    ancestor_uuids_by_uuid[additional_child_uuid] = set()
+                ancestor_uuids_by_uuid[additional_child_uuid].update(cur_task_ancestor_uuids)
 
+            descendant_uuids_by_uuid[cur_task['uuid']] = set(additional_children_uuids)
+            for ancestor_uuid in cur_task_ancestor_uuids:
+                descendant_uuids_by_uuid[ancestor_uuid].add(cur_task['uuid'])
+                descendant_uuids_by_uuid[ancestor_uuid].update(additional_children_uuids)
+
+            # traverse the graph via real children only, not additional_children.
             tasks_to_check.extend(children_by_uuid[cur_task['uuid']])
 
+    ancestors_by_uuid = {u: [tasks_by_uuid[au] for au in ancestor_uuids if au in tasks_by_uuid]
+                         for u, ancestor_uuids in ancestor_uuids_by_uuid.items()}
+    descendants_by_uuid = {u: [tasks_by_uuid[du] for du in descendant_uuids if du in tasks_by_uuid]
+                           for u, descendant_uuids in descendant_uuids_by_uuid.items()}
     return FlameTaskGraph(tasks_by_uuid, ancestors_by_uuid, descendants_by_uuid)
 
 
