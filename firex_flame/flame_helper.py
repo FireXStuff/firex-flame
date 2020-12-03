@@ -8,7 +8,7 @@ import signal
 from collections import namedtuple
 
 from firexapp.events.model import ADDITIONAL_CHILDREN_KEY
-
+from firexapp.submit.uid import Uid
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ FlameTaskGraph = namedtuple('FlameTaskGraph', ['tasks_by_uuid', 'ancestors_by_uu
 
 
 def get_flame_debug_dir(root_logs_dir):
-    return os.path.join(root_logs_dir, 'debug', 'flame')
+    return os.path.join(root_logs_dir, Uid.debug_dirname, 'flame')
 
 
 def get_flame_pid_file_path(root_logs_dir):
