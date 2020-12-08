@@ -385,7 +385,7 @@ class FlameRedisKillCleanupTest(FlameFlowTestConfiguration):
         sleep_exists = wait_until_task_name_exists_in_rec(log_dir, 'sleep')
         assert sleep_exists, "Sleep task doesn't exist in the flame rec file, something is wrong with run."
 
-        redis_pid = int(Path(log_dir,'debug', 'redis', 'redis.pid').read_text())
+        redis_pid = int(Path(log_dir,'firex_internal', 'redis', 'redis.pid').read_text())
         redis_killed = kill_and_wait(redis_pid, sig=signal.SIGKILL)
         assert redis_killed, "Failed to kill redis with pid %s" % redis_pid
 
