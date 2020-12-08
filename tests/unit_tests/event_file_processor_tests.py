@@ -12,7 +12,7 @@ class EventFileProcessorTests(unittest.TestCase):
     def test_process_rec_file(self):
         event_aggregator = FlameEventAggregator()
 
-        recording_file = os.path.join(test_data_dir, 'nop', 'debug', 'flame', 'flame.rec')
+        recording_file = os.path.join(test_data_dir, 'nop', 'firex_internal', 'flame', 'flame.rec')
 
         run_metadata = {}
         process_recording_file(event_aggregator, recording_file, run_metadata)
