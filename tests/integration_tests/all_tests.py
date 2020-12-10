@@ -14,8 +14,10 @@ from bs4 import BeautifulSoup
 import socketio
 from firexapp.testing.config_base import FlowTestConfiguration, assert_is_good_run
 from firexapp.submit.submit import get_log_dir_from_output
+from firexapp.submit.uid import Uid
 from firexapp.engine.celery import app
 from firexkit.chain import returns
+
 
 from firex_flame.event_file_processor import get_tasks_from_rec_file
 from firex_flame.flame_helper import get_flame_pid, wait_until_pid_not_exist, wait_until, get_rec_file, filter_paths, \
@@ -65,6 +67,8 @@ def assert_flame_web_ok(flame_url, path):
 class FlameLaunchesTest(FlameFlowTestConfiguration):
     """Verifies Flame is launched with nop chain by requesting a couple web endpoints."""
 
+    flame_terminate_on_complete = False
+
     def __init__(self):
         self.chain = 'nop'
         super().__init__()
@@ -94,6 +98,8 @@ class FlameLaunchesTest(FlameFlowTestConfiguration):
 
 class FlameLaunchWithCentralServerTest(FlameFlowTestConfiguration):
     """Verifies Flame UI correctly includes central server when supplied from firexapp."""
+
+    flame_terminate_on_complete = False
 
     def __init__(self):
         self.central_server = 'http://some_server.com'
@@ -137,6 +143,8 @@ class FlameTimeoutShutdownTest(FlameFlowTestConfiguration):
 class FlameSigtermShutdownTest(FlameFlowTestConfiguration):
     """ Flame shutsdown cleanly when getting a sigterm."""
 
+    flame_terminate_on_complete = False
+
     def initial_firex_options(self) -> list:
         return ["submit", "--chain", 'sleep']
 
@@ -149,6 +157,8 @@ class FlameSigtermShutdownTest(FlameFlowTestConfiguration):
 
 class FlameSigintShutdownTest(FlameFlowTestConfiguration):
     """ Flame shutsdown cleanly when getting a sigint."""
+
+    flame_terminate_on_complete = False
 
     def initial_firex_options(self) -> list:
         return ["submit", "--chain", 'sleep']
@@ -216,6 +226,8 @@ def get_tasks_by_name(log_dir, name, expect_single=False):
 
 class FlameRevokeNonExistantUuidTest(FlameFlowTestConfiguration):
     """ Uses Flame's SocketIO API to revoke a uuid that doesn't exist. """
+
+    flame_terminate_on_complete = False
 
     def initial_firex_options(self) -> list:
         return ["submit", "--chain", 'nop']
@@ -385,7 +397,7 @@ class FlameRedisKillCleanupTest(FlameFlowTestConfiguration):
         sleep_exists = wait_until_task_name_exists_in_rec(log_dir, 'sleep')
         assert sleep_exists, "Sleep task doesn't exist in the flame rec file, something is wrong with run."
 
-        redis_pid = int(Path(log_dir,'firex_internal', 'redis', 'redis.pid').read_text())
+        redis_pid = int(Path(log_dir, Uid.debug_dirname, 'redis', 'redis.pid').read_text())
         redis_killed = kill_and_wait(redis_pid, sig=signal.SIGKILL)
         assert redis_killed, "Failed to kill redis with pid %s" % redis_pid
 
@@ -405,6 +417,7 @@ class FlameTerminateOnCompleteTest(FlameFlowTestConfiguration):
     # No sync since we'll revoke the run & confirm the web server is no longer active.
     sync = False
     no_coverage = True
+    flame_terminate_on_complete = False
 
     def initial_firex_options(self) -> list:
         return ["submit", "--chain", 'sleep', '--sleep', '30', '--flame_terminate_on_complete', 'True',

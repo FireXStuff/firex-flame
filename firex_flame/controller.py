@@ -32,6 +32,7 @@ class FlameAppController:
             for query_hash, query_and_clients in self.listening_query_config_hashes_to_sids.items():
                 # Only bother filtering/emitting the event if there are clients for this query.
                 if query_and_clients['client_sids']:
+                    # FIXME: if the new data contains additional children,
                     queried_task_data = query_partial_tasks(new_data_by_task_uuid.keys(),
                                                             query_and_clients['query_config'],
                                                             tasks_by_uuid)
