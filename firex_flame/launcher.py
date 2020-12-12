@@ -2,10 +2,10 @@ import os
 import subprocess
 import time
 
-from firexapp.broker_manager.broker_factory import BrokerFactory
 from firexapp.common import qualify_firex_bin, select_env_vars
 from firexapp.submit.tracking_service import TrackingService
 from firexapp.submit.console import setup_console_logging
+from firexapp.submit.install_configs import FireXInstallConfigs
 
 from firex_flame.flame_helper import DEFAULT_FLAME_TIMEOUT, get_flame_debug_dir, get_rec_file, is_json_file
 from firex_flame.model_dumper import is_dump_complete, get_run_metadata_file, get_flame_url
@@ -94,7 +94,9 @@ class FlameLauncher(TrackingService):
                                 help='Paths specifying alternative task reprentations to dump at end of flame.',
                                 default=None)
 
-    def start(self, args, uid=None, **kwargs) -> dict:
+    def start(self, args, install_configs: FireXInstallConfigs, uid=None, **kwargs) -> dict:
+        super().start(args, install_configs, uid=uid, **kwargs)
+
         flame_debug_dir = get_flame_debug_dir(uid.logs_dir)
         os.makedirs(flame_debug_dir, exist_ok=True)
         self.broker_recv_ready_file = os.path.join(flame_debug_dir, 'celery_receiver_ready')
@@ -138,7 +140,7 @@ class FlameLauncher(TrackingService):
 
                 if self.wait_for_webserver:
                     # Only print Flame URL if we've waited for webserver, since otherwise we don't know the port.
-                    logger.info("Flame: %s" % get_flame_url(firex_logs_dir=self.firex_logs_dir))
+                    logger.info(f"Flame: {self.get_viewer_url()}")
 
         return self.is_ready_for_tasks
 
@@ -147,3 +149,8 @@ class FlameLauncher(TrackingService):
             # For sync requests, guarantee that the model is completely dumped before terminating.
             return is_dump_complete(self.firex_logs_dir)
         return True
+
+    def get_viewer_url(self):
+        if not self.install_configs.has_viewer():
+            return get_flame_url(firex_logs_dir=self.firex_logs_dir)
+        return self.install_configs.run_url
