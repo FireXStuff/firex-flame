@@ -404,9 +404,9 @@ class FlameRedisKillCleanupTest(FlameFlowTestConfiguration):
 
         wait_until_model_task_uuid_complete_runstate(log_dir)
 
-        runstates = [t['state'] for t in read_json(get_tasks_slim_file(log_dir)).values()]
-        assert all(s == 'task-incomplete' for s in runstates), \
-            "Expected all tasks incomplete, but found %s" % runstates
+        tasks = get_model_full_tasks_by_names(log_dir, ['RootTask', 'sleep'])
+        assert tasks['sleep'][0]['state'] == 'task-incomplete', "Expected sleep to be incomplete"
+        assert tasks['RootTask'][0]['state'] == 'task-incomplete', "Expected RootTask to be incomplete"
 
         flame_killed = wait_until_pid_not_exist(get_flame_pid(log_dir), timeout=4)
         assert not flame_killed, 'Flame killed after redis shutdown -- it should survive.'
