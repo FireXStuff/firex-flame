@@ -17,6 +17,7 @@ from firexapp.submit.submit import get_log_dir_from_output
 from firexapp.submit.uid import Uid
 from firexapp.engine.celery import app
 from firexkit.chain import returns
+from firexkit.task import flame
 
 
 from firex_flame.event_file_processor import get_tasks_from_rec_file
@@ -591,3 +592,48 @@ class FlameLiveMonitorFile(FlameFlowTestConfiguration):
                     "Should have stopped listening but found content."
             finally:
                 sio_client.disconnect()
+
+
+def _flame_return_result_fn(x):
+    return 2*x
+
+ARG1_VALUE = 'arg1-value'
+ARG2_VALUE = 'arg2-default'
+CUSTOM_VALUE = 'custom-value'
+UNREGISTERED_HTML_VALUE = 'some HTML'
+RETURN = 1
+
+@app.task(bind=True)
+@flame('arg1')
+@flame('arg2')
+@flame('custom_key')
+@flame('flame_data_result', _flame_return_result_fn)
+@returns('flame_data_result')
+def FlameDataService(self, uid, arg1, arg2='default'):
+    self.update_firex_data(custom_key=CUSTOM_VALUE)
+    self.send_firex_html(unregistered=UNREGISTERED_HTML_VALUE)
+    return RETURN
+
+
+class FlameDataServiceTest(FlameFlowTestConfiguration):
+
+    def initial_firex_options(self) -> list:
+        return ["submit", "--chain", 'FlameDataService', "--arg1", ARG1_VALUE, '--arg2', ARG2_VALUE]
+
+    def assert_on_flame_url(self, log_dir, flame_url):
+        dump_complete = wait_until(is_dump_complete, 5, 0.1, log_dir)
+        assert dump_complete, "Model dump not complete, can't assert on task data."
+
+        tasks_by_name = get_model_full_tasks_by_names(log_dir, ['FlameDataService'])
+        assert len(tasks_by_name) == 1
+        assert len(tasks_by_name['FlameDataService']) == 1
+
+        service_flame_data = tasks_by_name['FlameDataService'][0]['flame_data']
+
+        assert service_flame_data['arg1']['value'] == ARG1_VALUE
+        assert service_flame_data['arg2']['value'] == ARG2_VALUE
+        assert service_flame_data['custom_key']['value'] == CUSTOM_VALUE
+        assert service_flame_data['unregistered']['value'] == UNREGISTERED_HTML_VALUE
+        assert service_flame_data['flame_data_result']['value'] == _flame_return_result_fn(RETURN)
+
+        assert all(v['type'] == 'html' for v in service_flame_data.values())
