@@ -1,0 +1,60 @@
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  firex_base_logging_dir: "$CI_PROJECT_DIR/flow_test_results"
+
+cache:
+  paths:
+    - .cache/pip
+    - venv/
+
+stages:
+  - build
+  - test
+  - upload
+
+default:
+  image: firexstuff/firex-alpine-build:latest
+  before_script:
+    - source venv/bin/activate
+
+build:
+  stage: build
+  before_script:
+    - python -m venv venv
+    - source venv/bin/activate
+    - pip install --upgrade pip
+    - pip install --upgrade firexbuilder
+  script:
+    - pip install keyrings.alt
+    - firex-build build --install_test_reqs
+  artifacts:
+    paths:
+      - dist/
+
+test-unit:
+  stage: test
+  script:
+    - firex-build unit_tests
+  artifacts:
+    paths:
+      - .coverage
+
+test-integration:
+  stage: test
+  script:
+    - pip install --upgrade --force-reinstall --no-deps git+https://github.com/FireXStuff/firex-bundle-ci.git
+    - firexapp submit --chain RunAllIntegrationTests --public_runs True --install_config cloud-ci-install-configs.json --sync
+  artifacts:
+    paths:
+      - flow_test_results/
+    when: always
+
+upload-results:
+  inherit:
+    default: false
+  stage: upload
+  image: google/cloud-sdk
+  script:
+    - gcloud auth activate-service-account --key-file $GOOGLE_APPLICATION_CREDENTIALS
+    - gsutil -m rsync -e -r $firex_base_logging_dir  gs://runs.firexflame.com
+  when: always
