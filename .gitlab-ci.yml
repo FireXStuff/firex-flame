@@ -11,6 +11,7 @@ stages:
   - build
   - test
   - upload
+  - update-docs
 
 default:
   image: firexstuff/firex-alpine-build:latest
@@ -25,7 +26,6 @@ build:
     - pip install --upgrade pip
     - pip install --upgrade firexbuilder
   script:
-    - pip install keyrings.alt
     - firex-build build --install_test_reqs
   artifacts:
     paths:
@@ -42,7 +42,7 @@ test-unit:
 test-integration:
   stage: test
   script:
-    - pip install --upgrade --force-reinstall --no-deps git+https://github.com/FireXStuff/firex-bundle-ci.git
+    - pip install --upgrade --force-reinstall git+https://github.com/FireXStuff/firex-bundle-ci.git
     - sudo /usr/sbin/sshd
     - firexapp submit --chain RunAllIntegrationTests --public_runs True --install_config cloud-ci-install-configs.json --sync
   artifacts:
@@ -50,6 +50,14 @@ test-integration:
       - flow_test_results/
     when: always
 
+upload-codecov:
+  stage: upload
+  script:
+    - firex-build upload_codecov
+  artifacts:
+    reports:
+      cobertura: coverage.xml
+      
 upload-results:
   inherit:
     default: false
@@ -65,5 +73,18 @@ upload-pkg:
   script:
     - pip install keyrings.alt
     - firex-build upload_pip
+  only:
+    - tags
+    
+update-docs:
+  inherit:
+    default: false
+  stage: update-docs
+  image: google/cloud-sdk
+  script:
+    - gcloud auth activate-service-account --key-file $GOOGLE_APPLICATION_CREDENTIALS
+    - gsutil -m rsync -r html gs://www.firexkit.com
+  needs:
+    - upload-pkg
   only:
     - tags
