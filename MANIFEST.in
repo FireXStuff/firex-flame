@@ -1,2 +1,4 @@
 include LICENSE BUILD
 include fastentrypoints.py
+include versioneer.py
+include firex_flame/_version.py
