@@ -21,3 +21,4 @@ The Flame server as a system process last longer than the firexapp run itself, e
 be viewed after the firexapp execution has completed. To prevent Flame server processes from remaining indefinitely, 
 they self-terminate automatically after 2 days. The lifetime of Flame servers can be adjusted by 
 supplying '--flame_timeout <timeout in secs>'. 
+
