@@ -59,3 +59,11 @@ upload-results:
     - gcloud auth activate-service-account --key-file $GOOGLE_APPLICATION_CREDENTIALS
     - gsutil -m rsync -e -r $firex_base_logging_dir  gs://runs.firexflame.com
   when: always
+
+upload-pkg:
+  stage: upload
+  script:
+    - pip install keyrings.alt
+    - firex-build upload_pip
+  only:
+    - tags
