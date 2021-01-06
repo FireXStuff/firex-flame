@@ -31,6 +31,14 @@ build:
     paths:
       - dist/
 
+build-docs:
+  stage:  test
+  script:
+    - firex-build docs
+  artifacts:
+    paths:
+      - html/ 
+      
 test-unit:
   stage: test
   script:
@@ -86,5 +94,6 @@ update-docs:
     - gsutil -m rsync -r html gs://www.firexkit.com
   needs:
     - upload-pkg
+    - build-docs
   only:
     - tags
