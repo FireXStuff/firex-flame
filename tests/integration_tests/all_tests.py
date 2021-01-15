@@ -16,6 +16,8 @@ from firexapp.testing.config_base import FlowTestConfiguration, assert_is_good_r
 from firexapp.submit.submit import get_log_dir_from_output
 from firexapp.submit.uid import Uid
 from firexapp.engine.celery import app
+from firexapp.firex_subprocess import check_output
+from firexapp.events.model import EXTERNAL_COMMANDS_KEY
 from firexkit.chain import returns
 from firexkit.task import flame
 
@@ -612,6 +614,9 @@ RETURN = 1
 def FlameDataService(self, uid, arg1, arg2='default'):
     self.update_firex_data(custom_key=CUSTOM_VALUE)
     self.send_firex_html(unregistered=UNREGISTERED_HTML_VALUE)
+
+    echo_hello = check_output(['/bin/echo', 'hello'])
+
     return RETURN
 
 
@@ -628,12 +633,18 @@ class FlameDataServiceTest(FlameFlowTestConfiguration):
         assert len(tasks_by_name) == 1
         assert len(tasks_by_name['FlameDataService']) == 1
 
-        service_flame_data = tasks_by_name['FlameDataService'][0]['flame_data']
+        task = tasks_by_name['FlameDataService'][0]
+        service_flame_data = task['flame_data']
 
         assert service_flame_data['arg1']['value'] == ARG1_VALUE
         assert service_flame_data['arg2']['value'] == ARG2_VALUE
         assert service_flame_data['custom_key']['value'] == CUSTOM_VALUE
         assert service_flame_data['unregistered']['value'] == UNREGISTERED_HTML_VALUE
         assert service_flame_data['flame_data_result']['value'] == _flame_return_result_fn(RETURN)
-
         assert all(v['type'] == 'html' for v in service_flame_data.values())
+
+        external_command = list(task[EXTERNAL_COMMANDS_KEY].values())[0]
+        assert external_command['cmd'] == ['/bin/echo', 'hello']
+        assert external_command['result']['completed']
+        assert external_command['result']['output'].strip() == 'hello'
+        assert external_command['result']['returncode'] == 0

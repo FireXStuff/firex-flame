@@ -4,7 +4,7 @@ Aggregates events in to the task data model.
 from datetime import datetime
 import logging
 
-from firexapp.events.model import ADDITIONAL_CHILDREN_KEY
+from firexapp.events.model import ADDITIONAL_CHILDREN_KEY, EXTERNAL_COMMANDS_KEY
 
 from firex_flame.flame_helper import deep_merge
 
@@ -94,7 +94,7 @@ FIELD_CONFIG = {
     },
     'states': {'aggregate_merge': True},
     'exception_cause_uuid': {'copy_celery': True},
-    'external_commands': {
+    EXTERNAL_COMMANDS_KEY: {
         'copy_celery': True,
         'aggregate_merge': True,
     },
