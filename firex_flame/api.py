@@ -6,6 +6,9 @@ import logging
 
 from flask import jsonify
 from gevent import spawn, sleep
+from socket import gethostname
+import os
+import subprocess
 import paramiko
 
 from firex_flame.flame_helper import wait_until, query_full_tasks
@@ -51,95 +54,125 @@ def monitor_file(sio_server, sid, host, filename):
     def emit_line_data(data):
         sio_server.emit('file-data', data, room=sid)
 
-    # spawn ssh to host to tail -f the file - output to be sent to requesting client
-    logger.info("Will start monitoring file %s on host %s" % (filename, host))
-    # noinspection PyBroadException
-    try:
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(host, 22, timeout=60, compress=True)
+    # check if host is localhost or remote - use ssh if remote
+    if host in ['0.0.0.0', '127.0.0.1', 'localhost', gethostname()]:
+        # Read file locally - output to be sent to requesting client
+        logger.info("Will start monitoring file %s locally" % filename)
 
-        # Run find to locate file and match perms
-        _, stdout, stderr = ssh.exec_command("\\find %s -perm -004" % filename)
-        # Wait for command to return
-        stdout.channel.recv_exit_status()
-
-        # Read command stdout/err
-        res_out = stdout.read()
-        res_err = stderr.read()
-
-        # Check our results
-        if not res_out or res_out == b'':
-            if not res_err or res_err == b'':
-                emit_line_data("ERROR: File access permissions prevent viewing of file.\n")
-            else:
-                res_err = res_err.decode('utf-8', 'ignore')
-                if "No such file or directory" in res_err:
-                    # File no longer exists on remote host
-                    emit_line_data('[Temporary file no longer exists - executed command has completed]\n')
-                else:
-                    emit_line_data("ERROR: Unexpected error while checking file existence and permissions: %s" %
-                                   res_err)
+        if not os.path.isfile(filename):
+            emit_line_data("File %s does not exist." % filename)
             return
-        else:
-            res_out = res_out.decode('utf-8', 'ignore')
-            if filename not in res_out:
-                emit_line_data("ERROR: Unexpected output while checking file existence and permissions: %s" % res_out)
-                return
+
+        if not os.access(filename, os.R_OK):
+            emit_line_data("File %s is not accessible." % filename)
+            return
 
         try:
-            # File exists and has open permissions - tail it
-            _, stdout, _ = ssh.exec_command("""/bin/bash -c '/usr/bin/tail -n %d --follow=name %s 2>/dev/null' """ %
-                                            (max_lines, filename), bufsize=128, get_pty=True)
-
-            # Keep track of all spawned processes to be able to manage them later
-            subprocess_dict[sid] = ssh
-
-            # Set read timeout to 1s
-            stdout.channel.settimeout(1)
-
-            # local helper function
-            def get_data_chunk():
-                from socket import timeout
-                data_chunk = ''
-                max_chunk_lines = 10000
-                num_chunk_lines = 0
-                end_of_file = False
-                while num_chunk_lines < max_chunk_lines:
-                    try:
-                        line = stdout.readline()
-                        if not line or line == '':
-                            # empty line signifies eof
-                            end_of_file = True
-                            break
-                    except timeout:
-                        # No more data available within timeout: consider this a full data_chunk to be sent off
-                        break
-                    else:
-                        data_chunk += line
-                        num_chunk_lines += 1
-                return data_chunk, num_chunk_lines, end_of_file
-
-            total_num_lines = 0
-            eof = False
-            while not eof:
-                chunk, num_lines, eof = get_data_chunk()
-                if num_lines:
-                    if not total_num_lines:
-                        chunk = "[start of data received]\n" + chunk
-                    emit_line_data(chunk)
-                    total_num_lines += num_lines
-
-            if total_num_lines:
-                emit_line_data('[End of file - program exited]\n')
-                return
-
+            proc = subprocess.Popen(['/usr/bin/tail', '-n', str(max_lines), '--follow=name', filename, '2>/dev/null'],
+                                    stdout=subprocess.PIPE)
         except Exception:
             logger.warning("Exception raised while trying to spawn subprocess to monitor file: ", exc_info=True)
+            return
 
-    except Exception as e:
-        emit_line_data("ERROR: Spawned subprocess to monitor file failed:\n")
-        emit_line_data(str(e))
+        # keep track of sub-procs for later cleanup
+        subprocess_dict[sid] = proc
+
+        while True:
+            line = proc.stdout.readline()
+            if not line:
+                break
+            emit_line_data(line.decode('utf-8'))
+
+    else:
+        # spawn ssh to host to tail -f the file - output to be sent to requesting client
+        logger.info("Will start monitoring file %s on host %s" % (filename, host))
+        # noinspection PyBroadException
+        try:
+            ssh = paramiko.SSHClient()
+            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            ssh.connect(host, 22, timeout=60, compress=True)
+
+            # Run find to locate file and match perms
+            _, stdout, stderr = ssh.exec_command("\\find %s -perm -004" % filename)
+            # Wait for command to return
+            stdout.channel.recv_exit_status()
+
+            # Read command stdout/err
+            res_out = stdout.read()
+            res_err = stderr.read()
+
+            # Check our results
+            if not res_out or res_out == b'':
+                if not res_err or res_err == b'':
+                    emit_line_data("ERROR: File access permissions prevent viewing of file.\n")
+                else:
+                    res_err = res_err.decode('utf-8', 'ignore')
+                    if "No such file or directory" in res_err:
+                        # File no longer exists on remote host
+                        emit_line_data('[Temporary file no longer exists - executed command has completed]\n')
+                    else:
+                        emit_line_data("ERROR: Unexpected error while checking file existence and permissions: %s" %
+                                       res_err)
+                return
+            else:
+                res_out = res_out.decode('utf-8', 'ignore')
+                if filename not in res_out:
+                    emit_line_data("ERROR: Unexpected output while checking file existence and permissions: %s" % res_out)
+                    return
+
+            try:
+                # File exists and has open permissions - tail it
+                _, stdout, _ = ssh.exec_command("""/bin/bash -c '/usr/bin/tail -n %d --follow=name %s 2>/dev/null' """ %
+                                            (max_lines, filename), bufsize=128, get_pty=True)
+
+                # Keep track of all spawned processes to be able to manage them later
+                subprocess_dict[sid] = ssh
+
+                # Set read timeout to 1s
+                stdout.channel.settimeout(1)
+
+                # local helper function
+                def get_data_chunk():
+                    from socket import timeout
+                    data_chunk = ''
+                    max_chunk_lines = 10000
+                    num_chunk_lines = 0
+                    end_of_file = False
+                    while num_chunk_lines < max_chunk_lines:
+                        try:
+                            line = stdout.readline()
+                            if not line or line == '':
+                                # empty line signifies eof
+                                end_of_file = True
+                                break
+                        except timeout:
+                            # No more data available within timeout: consider this a full data_chunk to be sent off
+                            break
+                        else:
+                            data_chunk += line
+                            num_chunk_lines += 1
+                    return data_chunk, num_chunk_lines, end_of_file
+
+                total_num_lines = 0
+                eof = False
+                while not eof:
+                    chunk, num_lines, eof = get_data_chunk()
+                    if num_lines:
+                        if not total_num_lines:
+                            chunk = "[start of data received]\n" + chunk
+                        emit_line_data(chunk)
+                        total_num_lines += num_lines
+
+                if total_num_lines:
+                    emit_line_data('[End of file - program exited]\n')
+                    return
+
+            except Exception:
+                logger.warning("Exception raised while trying to spawn subprocess to monitor file: ", exc_info=True)
+
+        except Exception as e:
+            emit_line_data("ERROR: Spawned subprocess to monitor file failed:\n")
+            emit_line_data(str(e))
 
 
 def term_subproc(sid):
