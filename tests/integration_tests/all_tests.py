@@ -533,7 +533,8 @@ class QuertyLiveExtraRepData(FlameFlowTestConfiguration):
         assert len(single_task['descendants']) == 1
         assert list(single_task['descendants'].values())[0]['name'] == 'GrandChild'
 
-class FlameLiveMonitorFile(FlameFlowTestConfiguration):
+
+class FlameLiveMonitorLocalFile(FlameFlowTestConfiguration):
     """ Uses Flame's SocketIO API to revoke a run. """
 
     # Don't run with --sync, since this test needs the flame server up.
@@ -545,55 +546,74 @@ class FlameLiveMonitorFile(FlameFlowTestConfiguration):
         return ["submit", "--chain", 'sleep', '--sleep', '120']
 
     def assert_on_flame_url(self, log_dir, flame_url):
-        sleep_exists = wait_until_task_name_exists_in_rec(log_dir, 'sleep')
-        assert sleep_exists, "Sleep task doesn't exist in the flame rec file, something is wrong with run."
+        check_live_file_monitoring('localhost', log_dir, flame_url)
 
-        with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
-            # Open file permissions so flame will allow live file viewing.
-            from stat import S_IRUSR, S_IRGRP, S_IROTH
-            os.chmod(f.name, S_IRUSR | S_IRGRP | S_IROTH)
 
-            initial_content = '1 2\n'
-            f.write(initial_content)
+class FlameLiveMonitorRemoteFile(FlameFlowTestConfiguration):
+    """ Uses Flame's SocketIO API to revoke a run. """
+
+    # Don't run with --sync, since this test needs the flame server up.
+    sync = False
+    no_coverage = True
+
+    def initial_firex_options(self) -> list:
+        # Sleep so that assert_on_flame_url can call live monitor APIs.
+        return ["submit", "--chain", 'sleep', '--sleep', '120']
+
+    def assert_on_flame_url(self, log_dir, flame_url):
+        check_live_file_monitoring('0.0.0.0', log_dir, flame_url)
+
+
+def check_live_file_monitoring(host, log_dir, flame_url):
+    sleep_exists = wait_until_task_name_exists_in_rec(log_dir, 'sleep')
+    assert sleep_exists, "Sleep task doesn't exist in the flame rec file, something is wrong with run."
+
+    with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+        # Open file permissions so flame will allow live file viewing.
+        from stat import S_IRUSR, S_IRGRP, S_IROTH
+        os.chmod(f.name, S_IRUSR | S_IRGRP | S_IROTH)
+
+        initial_content = '1 2\n'
+        f.write(initial_content)
+        f.flush()
+
+        sio_client = socketio.Client()
+
+        container = {'content': ''}
+
+        @sio_client.on('file-data')
+        def get_file_line(chunk):
+            container['content'] += chunk
+
+        try:
+            sio_client.connect(flame_url)
+            sio_client.emit('start-listen-file', data={'host': host, 'filepath': f.name})
+
+            found_initial = wait_until(lambda: initial_content.strip() in container['content'],
+                                       timeout=10, sleep_for=1)
+            assert found_initial, "Expected initial content '%s' but was not found in: %s." \
+                                  % (initial_content, container['content'])
+
+            update_listen_content = 'update content\n'
+            f.write(update_listen_content)
             f.flush()
 
-            sio_client = socketio.Client()
-
-            container = {'content': ''}
-
-            @sio_client.on('file-data')
-            def get_file_line(chunk):
-                container['content'] += chunk
-
-            try:
-                sio_client.connect(flame_url)
-                sio_client.emit('start-listen-file', data={'host': '0.0.0.0', 'filepath': f.name})
-
-                found_initial = wait_until(lambda: initial_content.strip() in container['content'],
-                                           timeout=10, sleep_for=1)
-                assert found_initial, "Expected initial content '%s' but was not found in: %s." \
-                                      % (initial_content, container['content'])
-
-                update_listen_content = 'update content\n'
-                f.write(update_listen_content)
-                f.flush()
-
-                found_update = wait_until(lambda: update_listen_content.strip() in container['content'],
+            found_update = wait_until(lambda: update_listen_content.strip() in container['content'],
                                           timeout=10, sleep_for=1)
-                assert found_update, "Expected update content '%s' but was not found in: %s." \
-                                     % (update_listen_content, container['content'])
+            assert found_update, "Expected update content '%s' but was not found in: %s." \
+                                 % (update_listen_content, container['content'])
 
-                sio_client.emit('stop-listen-file')
+            sio_client.emit('stop-listen-file')
 
-                after_stop_listen_content = 'some more content\n'
-                f.write(after_stop_listen_content)
-                f.flush()
+            after_stop_listen_content = 'some more content\n'
+            f.write(after_stop_listen_content)
+            f.flush()
 
-                time.sleep(3)
-                assert after_stop_listen_content not in container['content'], \
-                    "Should have stopped listening but found content."
-            finally:
-                sio_client.disconnect()
+            time.sleep(3)
+            assert after_stop_listen_content not in container['content'], \
+                "Should have stopped listening but found content."
+        finally:
+            sio_client.disconnect()
 
 
 def _flame_return_result_fn(x):
