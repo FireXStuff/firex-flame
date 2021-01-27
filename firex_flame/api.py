@@ -55,7 +55,7 @@ def monitor_file(sio_server, sid, host, filename):
         sio_server.emit('file-data', data, room=sid)
 
     # check if host is localhost or remote - use ssh if remote
-    if host in ['0.0.0.0', '127.0.0.1', 'localhost', gethostname()]:
+    if host in ['127.0.0.1', 'localhost', gethostname()]:
         # Read file locally - output to be sent to requesting client
         logger.info("Will start monitoring file %s locally" % filename)
 
