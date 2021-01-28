@@ -635,7 +635,7 @@ def FlameDataService(self, uid, arg1, arg2='default'):
     self.update_firex_data(custom_key=CUSTOM_VALUE)
     self.send_firex_html(unregistered=UNREGISTERED_HTML_VALUE)
 
-    echo_hello = check_output(['/bin/echo', 'hello'])
+    check_output(['/bin/echo', 'hello'])
 
     return RETURN
 
@@ -668,3 +668,32 @@ class FlameDataServiceTest(FlameFlowTestConfiguration):
         assert external_command['result']['completed']
         assert external_command['result']['output'].strip() == 'hello'
         assert external_command['result']['returncode'] == 0
+
+
+@app.task(bind=True)
+@flame('*')
+@returns('flame_data_result')
+def FlameAbogDataService(self, uid, arg1, arg2='default'):
+    return RETURN
+
+
+class FlameAbogDataServiceTest(FlameFlowTestConfiguration):
+
+    def initial_firex_options(self) -> list:
+        return ["submit", "--chain", 'FlameAbogDataService', "--arg1", ARG1_VALUE, '--arg2', ARG2_VALUE]
+
+    def assert_on_flame_url(self, log_dir, flame_url):
+        dump_complete = wait_until(is_dump_complete, 5, 0.1, log_dir)
+        assert dump_complete, "Model dump not complete, can't assert on task data."
+
+        tasks_by_name = get_model_full_tasks_by_names(log_dir, ['FlameAbogDataService'])
+        assert len(tasks_by_name) == 1
+        assert len(tasks_by_name['FlameAbogDataService']) == 1
+
+        task = tasks_by_name['FlameAbogDataService'][0]
+        service_flame_abog_data = task['flame_data']['*']['value']
+
+        assert 'arg1' in service_flame_abog_data
+        assert 'arg2' in service_flame_abog_data
+        assert 'flame_data_result' in service_flame_abog_data
+        assert str(RETURN) in service_flame_abog_data
