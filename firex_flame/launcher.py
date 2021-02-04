@@ -3,6 +3,7 @@ import subprocess
 import time
 
 from firexapp.common import qualify_firex_bin, select_env_vars
+from firexapp.submit.submit import OptionalBoolean
 from firexapp.submit.tracking_service import TrackingService
 from firexapp.submit.console import setup_console_logging
 from firexapp.submit.install_configs import FireXInstallConfigs
@@ -86,12 +87,12 @@ class FlameLauncher(TrackingService):
                                 default=0)
         arg_parser.add_argument('--flame_terminate_on_complete',
                                 help='Terminate Flame when run completes. Ignores timeout arg entirely.',
-                                default=None, const=True, nargs='?')
+                                default=None, const=True, nargs='?', action=OptionalBoolean)
         arg_parser.add_argument('--flame_wait_for_webserver',
                                 help='Wait for webserver when waiting to be ready for tasks.',
-                                default=None, const=True, nargs='?')
+                                default=True, const=True, nargs='?', action=OptionalBoolean)
         arg_parser.add_argument('--flame_extra_task_dump_paths',
-                                help='Paths specifying alternative task reprentations to dump at end of flame.',
+                                help='Paths specifying alternative task represetnation to dump at end of flame.',
                                 default=None)
 
     def start(self, args, install_configs: FireXInstallConfigs, uid=None, **kwargs) -> dict:
@@ -104,10 +105,7 @@ class FlameLauncher(TrackingService):
         self.sync = args.sync
         self.firex_logs_dir = uid.logs_dir
 
-        if args.flame_wait_for_webserver is None:
-            self.wait_for_webserver = True
-        else:
-            self.wait_for_webserver = args.flame_wait_for_webserver
+        self.wait_for_webserver = args.flame_wait_for_webserver
 
         flame_args = get_flame_args(uid, self.broker_recv_ready_file, args)
         self.stdout_file = os.path.join(flame_debug_dir, 'flame.stdout')

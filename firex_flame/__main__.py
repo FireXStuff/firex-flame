@@ -1,6 +1,8 @@
 import sys
 
 # Prevent dependencies from taking module loading hit of pkg_resources.
+from firexapp.submit.submit import OptionalBoolean
+
 noop_class = type('noop', (object,), {'iter_entry_points': lambda _: []})
 sys.modules["pkg_resources"] = noop_class
 sys.modules["celery.events.dispatcher"] = type('noop2', (object,), {'EventDispatcher': noop_class})
@@ -56,8 +58,7 @@ def _parse_args():
     parser.add_argument('--terminate_on_complete',
                         help='Supply if the Flame server should terminate when the run completes. '
                              'Causes the value of --flame_timeout to be ignored entirely.',
-                        type=bool,
-                        default=False)
+                        default=None, const=True, nargs='?', action=OptionalBoolean)
     parser.add_argument('--extra_task_dump_paths',
                         help='Path to files specifying alternate task dump formats.',
                         type=str, default='')
