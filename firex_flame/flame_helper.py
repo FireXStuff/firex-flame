@@ -21,6 +21,10 @@ DEFAULT_FLAME_TIMEOUT = 60 * 60 * 24 * 2
 FlameTaskGraph = namedtuple('FlameTaskGraph', ['tasks_by_uuid', 'ancestors_by_uuid', 'descendants_by_uuid'])
 
 
+def get_flame_redirect_file_path(root_logs_dir):
+    return os.path.join(root_logs_dir, 'flame.html')
+
+
 def get_flame_debug_dir(root_logs_dir):
     return os.path.join(root_logs_dir, Uid.debug_dirname, 'flame')
 

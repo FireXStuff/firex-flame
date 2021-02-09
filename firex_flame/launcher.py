@@ -8,7 +8,8 @@ from firexapp.submit.tracking_service import TrackingService
 from firexapp.submit.console import setup_console_logging
 from firexapp.submit.install_configs import FireXInstallConfigs
 
-from firex_flame.flame_helper import DEFAULT_FLAME_TIMEOUT, get_flame_debug_dir, get_rec_file, is_json_file
+from firex_flame.flame_helper import DEFAULT_FLAME_TIMEOUT, get_flame_debug_dir, get_rec_file, is_json_file, \
+    get_flame_redirect_file_path
 from firex_flame.model_dumper import is_dump_complete, get_run_metadata_file, get_flame_url
 
 logger = setup_console_logging(__name__)
@@ -135,12 +136,18 @@ class FlameLauncher(TrackingService):
             self.is_ready_for_tasks = broker_ready and webserver_ready
             if self.is_ready_for_tasks:
                 logger.debug("Flame up after %.2f s" % (time.time() - self.start_time))
-
                 if self.wait_for_webserver:
                     # Only print Flame URL if we've waited for webserver, since otherwise we don't know the port.
                     logger.info(f"Flame: {self.get_viewer_url()}")
+                self.write_flame_redirect()
 
         return self.is_ready_for_tasks
+
+    def write_flame_redirect(self):
+        # Write the flame redirect file in the run's logs dir
+        flame_redirect_filepath = get_flame_redirect_file_path(self.firex_logs_dir)
+        with open(flame_redirect_filepath, 'w') as f:
+            f.write(f'<meta http-equiv="refresh" content="0; url={self.get_viewer_url()}" />')
 
     def ready_release_console(self, **kwargs) -> bool:
         if self.sync:
