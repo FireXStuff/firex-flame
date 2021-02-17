@@ -23,7 +23,7 @@ setup(name='firex_flame',
             'firexapp',
             # Middle UI version number indicates expected server API version.
             # e.g 0.20.x means this server adheres to contract version 0.20 between UI and server.
-            "firex_flame_ui<0.26",
+            "firex_flame_ui<0.27",
             "requests",
             "beautifulsoup4",
             "paramiko",
