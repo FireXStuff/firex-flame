@@ -129,16 +129,15 @@ class FlameLaunchWithCentralServerTest(FlameFlowTestConfiguration):
 
 class FlameTimeoutShutdownTest(FlameFlowTestConfiguration):
     """ Flame shuts itself down when a given timeout is exceeded."""
-
-    def __init__(self):
-        self.flame_timeout = 2
-        super().__init__()
+    sync = False
+    flame_timeout = 2
 
     def initial_firex_options(self) -> list:
-        return ["submit", "--chain", 'nop', '--flame_timeout', str(self.flame_timeout)]
+        return ["submit", "--chain", 'nop',
+                '--flame_timeout', str(self.flame_timeout)]
 
     def assert_on_flame_url(self, log_dir, flame_url):
-        time.sleep(self.flame_timeout + 1)
+        time.sleep(self.flame_timeout + 3)
         flame_pid = get_flame_pid(log_dir)
         assert not psutil.pid_exists(flame_pid), "Timeout should have killed flame pid, but it still exists."
 
