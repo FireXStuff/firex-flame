@@ -32,7 +32,7 @@ def create_broker_consumer_thread(broker_consumer_config, controller, event_aggr
 
 
 def start_flame(webapp_port, broker_consumer_config, run_metadata, recording_file, shutdown_handler,
-                extra_task_dump_paths):
+                extra_task_dump_paths, serve_logs_dir):
     event_aggregator = FlameEventAggregator()
     controller = FlameAppController(run_metadata, extra_task_dump_paths)
     if not recording_file or not os.path.isfile(recording_file):
@@ -50,4 +50,4 @@ def start_flame(webapp_port, broker_consumer_config, run_metadata, recording_fil
     # Delaying of importing of all web dependencies is a deliberate startup performance optimization.
     # The broker should be listening for events as quickly as possible.
     from firex_flame.web_app import start_web_server
-    return start_web_server(webapp_port, event_aggregator, run_metadata, controller, celery_app)
+    return start_web_server(webapp_port, event_aggregator, run_metadata, controller, celery_app, serve_logs_dir)

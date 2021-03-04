@@ -11,8 +11,7 @@ import socketio
 from gevent import pywsgi
 from geventwebsocket.handler import WebSocketHandler
 
-from flask import Flask, Blueprint, redirect, send_from_directory, Response, render_template
-from flask_autoindex import AutoIndexBlueprint
+from flask import Flask, redirect, send_from_directory, Response, render_template
 
 from firex_flame.api import create_socketio_task_api, create_revoke_api, create_rest_task_api
 from firexapp.submit.reporting import REL_COMPLETION_REPORT_PATH
@@ -86,7 +85,6 @@ def create_ui_index_render_function(central_server, central_server_ui_path):
             relative_links_and_scripts = ui_resource_links_and_scripts(REL_UI_RESOURCE_PATH)
 
             if central_server_ui_url:
-                # central_resource_root = 'http://firex.cisco.com/auto/firex/flame'
                 central_links_and_scripts = ui_resource_links_and_scripts(central_server_ui_url)
             else:
                 # When central valus not supplied, the index.html template produces an html file that references
@@ -129,7 +127,7 @@ def create_ui_config(run_metadata):
     }
 
 
-def create_web_app(run_metadata):
+def create_web_app(run_metadata, serve_logs_dir):
     web_app = Flask(__name__)
     web_app.response_class = FlameResponse
     web_app.secret_key = os.urandom(24)
@@ -157,16 +155,19 @@ def create_web_app(run_metadata):
     # Redirect for old URLs. These links should be updated in emails etc, then this redirect removed.
     web_app.add_url_rule('/root/<uuid>', 'subtree', lambda uuid: redirect('/#/root/' + uuid))
 
-    # Add directory listings and file serve for logs.
-    auto_index = Blueprint('auto_index', __name__)
-    AutoIndexBlueprint(auto_index, browse_root=run_metadata['logs_dir'])
-    web_app.register_blueprint(auto_index, url_prefix=run_metadata['logs_dir'])
+    if serve_logs_dir:
+        # Add directory listings and file serve for logs.
+        from flask import Blueprint
+        from flask_autoindex import AutoIndexBlueprint
+        auto_index = Blueprint('auto_index', __name__)
+        AutoIndexBlueprint(auto_index, browse_root=run_metadata['logs_dir'])
+        web_app.register_blueprint(auto_index, url_prefix=run_metadata['logs_dir'])
 
     return web_app
 
 
-def start_web_server(webapp_port, event_aggregator, run_metadata, controller, celery_app):
-    web_app = create_web_app(run_metadata)
+def start_web_server(webapp_port, event_aggregator, run_metadata, controller, celery_app, serve_logs_dir: bool):
+    web_app = create_web_app(run_metadata, serve_logs_dir)
     # TODO: parametrize cors_allowed_origins.
     sio_server = socketio.Server(cors_allowed_origins='*', async_mode='gevent')
     sio_web_app = socketio.WSGIApp(sio_server, web_app)

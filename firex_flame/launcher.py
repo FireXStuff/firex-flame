@@ -1,6 +1,7 @@
 import os
 import subprocess
 import time
+import distutils.util
 
 from firexapp.common import qualify_firex_bin, select_env_vars
 from firexapp.submit.submit import OptionalBoolean
@@ -38,11 +39,12 @@ def get_flame_args(uid, broker_recv_ready_file, args):
         'terminate_on_complete': args.flame_terminate_on_complete,
         'firex_bin_path': args.firex_bin_path,
         'extra_task_dump_paths': args.flame_extra_task_dump_paths,
+        'serve_logs_dir': args.flame_serve_logs_dir,
     }
     result = []
     for k, v in cmd_args.items():
         if v is not None:
-            result.append('--%s' % k)
+            result.append(f'--{k}')
             result.append('%s' % v)
     return result
 
@@ -95,6 +97,11 @@ class FlameLauncher(TrackingService):
         arg_parser.add_argument('--flame_extra_task_dump_paths',
                                 help='Paths specifying alternative task represetnation to dump at end of flame.',
                                 default=None)
+        arg_parser.add_argument('--flame_serve_logs_dir',
+                                help="Control if the Flame server makes the run's logs_dir available via HTTP(S).",
+                                type=lambda x: bool(distutils.util.strtobool(x)),
+                                default=None)
+
 
     def start(self, args, install_configs: FireXInstallConfigs, uid=None, **kwargs) -> dict:
         super().start(args, install_configs, uid=uid, **kwargs)

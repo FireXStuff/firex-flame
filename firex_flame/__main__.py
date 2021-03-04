@@ -11,6 +11,7 @@ from gevent import monkey
 monkey.patch_all()
 
 import argparse
+import distutils.util
 import logging
 import os
 from pathlib import Path
@@ -62,6 +63,11 @@ def _parse_args():
     parser.add_argument('--extra_task_dump_paths',
                         help='Path to files specifying alternate task dump formats.',
                         type=str, default='')
+    parser.add_argument('--serve_logs_dir',
+                        help='Whether or not the Flame web server should make the logs_dir of the run available via '
+                             'HTTP(S).',
+                        type=lambda x: bool(distutils.util.strtobool(x)),
+                        default=True)
 
     return parser.parse_args()
 
@@ -156,7 +162,8 @@ def main():
         logger.info('Starting Flame Server with args: %s' % args)
         web_server = start_flame(args.port, create_broker_processor_config(args),
                                  _create_run_metadata(args), args.recording, shutdown_handler,
-                                 args.extra_task_dump_paths.split(',') if args.extra_task_dump_paths else [])
+                                 args.extra_task_dump_paths.split(',') if args.extra_task_dump_paths else [],
+                                 args.serve_logs_dir)
         # Allow the shutdown handler to stop the web server before we serve_forever.
         shutdown_handler.web_server = web_server
         print(f"Flame server running on: {get_flame_url(web_server.server_port)}")
