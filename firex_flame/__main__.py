@@ -1,8 +1,5 @@
 import sys
 
-# Prevent dependencies from taking module loading hit of pkg_resources.
-from firexapp.submit.submit import OptionalBoolean
-
 noop_class = type('noop', (object,), {'iter_entry_points': lambda _: []})
 sys.modules["pkg_resources"] = noop_class
 sys.modules["celery.events.dispatcher"] = type('noop2', (object,), {'EventDispatcher': noop_class})
@@ -21,6 +18,8 @@ from threading import Timer
 from firex_flame.main_app import start_flame
 from firex_flame.flame_helper import get_flame_debug_dir, get_flame_pid_file_path, DEFAULT_FLAME_TIMEOUT, \
     BrokerConsumerConfig, get_flame_url
+# Prevent dependencies from taking module loading hit of pkg_resources.
+from firexapp.submit.submit import OptionalBoolean
 
 logger = logging.getLogger(__name__)
 
