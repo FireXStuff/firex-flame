@@ -166,3 +166,7 @@ class FlameLauncher(TrackingService):
         if not self.install_configs.has_viewer():
             return get_flame_url(firex_logs_dir=self.firex_logs_dir)
         return self.install_configs.run_url
+
+    def get_version(self):
+        import firex_flame
+        return firex_flame.__version__
