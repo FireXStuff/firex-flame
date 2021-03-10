@@ -17,7 +17,7 @@ from threading import Timer
 
 from firex_flame.main_app import start_flame
 from firex_flame.flame_helper import get_flame_debug_dir, get_flame_pid_file_path, DEFAULT_FLAME_TIMEOUT, \
-    BrokerConsumerConfig, get_flame_url
+    BrokerConsumerConfig, get_flame_url, wait_until
 # Prevent dependencies from taking module loading hit of pkg_resources.
 from firexapp.submit.submit import OptionalBoolean
 
@@ -96,12 +96,15 @@ class ShutdownHandler:
         #  should do a 'dump complete if not already dumped' and handle concurrency issues, but only when a broker
         #  is present (i.e. not when replaying a recording). Generating the dumped model while processing events
         #  mitigates but does not eliminate this issue.
-        logging.shutdown()
+
+        # Avoid race condition where webserver is started immediately after shutdown is called.
+        wait_until(lambda: self.web_server is not None, timeout=5, sleep_for=0.5)
         if self.web_server:
             self.web_server.stop()
         # lazy load this module for startup performance.
         from firex_flame.api import term_all_subprocs
         term_all_subprocs()
+        logging.shutdown()
 
 
 def _config_logging(root_logs_dir):
