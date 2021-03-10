@@ -130,10 +130,10 @@ class FlameLaunchWithCentralServerTest(FlameFlowTestConfiguration):
 class FlameTimeoutShutdownTest(FlameFlowTestConfiguration):
     """ Flame shuts itself down when a given timeout is exceeded."""
     sync = False
-    flame_timeout = 2
+    flame_timeout = 1
 
     def initial_firex_options(self) -> list:
-        return ["submit", "--chain", 'nop',
+        return ["submit", "--chain", 'sleep', '--sleep', str(self.flame_timeout),
                 '--flame_timeout', str(self.flame_timeout)]
 
     def assert_on_flame_url(self, log_dir, flame_url):
