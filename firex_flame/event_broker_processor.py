@@ -50,7 +50,7 @@ class RunningModelDumper:
     def _maybe_dump_task(self, uuid, event_type):
         if uuid in self.all_tasks_by_uuid:
             task = self.all_tasks_by_uuid[uuid]
-            if (event_type in ['task-started', 'task-completed']
+            if (event_type in ['task-started-info', 'task-completed']
                     or uuid in self.seen_task_completed_uuids):
                 self._dump_full_task(uuid, task)
                 if event_type == 'task-completed':

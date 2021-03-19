@@ -38,7 +38,7 @@ class TaskQueryTests(unittest.TestCase):
             }
 
             running_model_dumper = RunningModelDumper(flame_controller, all_tasks_by_uuid)
-            running_model_dumper.queue_maybe_write_tasks({uuid1: 'task-started',
+            running_model_dumper.queue_maybe_write_tasks({uuid1: 'task-started-info',
                                                           uuid2: 'task-completed',
                                                           uuid3: 'task-blocked', # this dumper will not write this task.
                                                           })
@@ -66,7 +66,7 @@ class TaskQueryTests(unittest.TestCase):
             }
 
             running_model_dumper = RunningModelDumper(flame_controller, all_tasks_by_uuid)
-            running_model_dumper.queue_maybe_write_tasks({uuid1: 'task-started'})
+            running_model_dumper.queue_maybe_write_tasks({uuid1: 'task-started-info'})
 
             running_model_dumper._queue.join()
             self.assertEqual(initial_task, load_full_task(log_dir, uuid1))
