@@ -81,6 +81,9 @@ class RunningModelDumper:
                     break
                 else:
                     logger.warning(f"Unknown in-progress dumper work queue entry with type {dump_type}")
+            except Exception as e:
+                logger.error("Failure while processing task-dumping work queue entry.")
+                logger.exception(e)
             finally:
                 self._queue.task_done()
 
