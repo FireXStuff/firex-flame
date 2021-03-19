@@ -27,7 +27,7 @@ from firex_flame.flame_helper import get_flame_pid, wait_until_pid_not_exist, wa
     kill_flame, kill_and_wait, json_file_fn, wait_until_path_exist, deep_merge, wait_until_web_request_ok
 from firex_flame.event_aggregator import INCOMPLETE_STATES, COMPLETE_STATES
 from firex_flame.model_dumper import get_tasks_slim_file, get_model_full_tasks_by_names, is_dump_complete, \
-    get_run_metadata_file, get_flame_url, find_flame_model_dir, load_task_representation
+    get_run_metadata_file, get_flame_url, find_flame_model_dir, load_task_representation, load_slim_tasks
 
 
 test_data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
@@ -474,6 +474,24 @@ class DumpDataOnCompleteTest(FlameFlowTestConfiguration):
         found_paths = filter_paths(tasks_by_name, query)['add']
         assert len(found_paths) == 1
 
+
+class DumpSomeDataOnForceKillTest(FlameFlowTestConfiguration):
+    """ Tests task data model dumping performed even when Flame is force terminated. """
+    sync = False
+
+    def initial_firex_options(self) -> list:
+        return ["submit", "--chain", 'sleep', '--sleep', '10']
+
+    def assert_on_flame_url(self, log_dir, flame_url):
+        sleep_exists = wait_until_task_name_exists_in_rec(log_dir, 'sleep')
+        assert sleep_exists
+        time.sleep(2) # small time for slim file to be created.
+        # Expect run still active due to sleep and sync=False
+        kill_flame(log_dir)
+
+        slim_tasks = load_slim_tasks(log_dir)
+        assert any(t['name'] == 'sleep' for t in slim_tasks.values()), \
+            "Expected slim tasks including 'sleep' to have been dumped."
 
 @app.task(bind=True)
 def Parent(self):
