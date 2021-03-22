@@ -48,11 +48,15 @@ def get_run_metadata_file(firex_logs_dir=None, root_model_dir=None):
     return os.path.join(_get_base_model_dir(firex_logs_dir, root_model_dir), 'run-metadata.json')
 
 
-def get_flame_url(firex_logs_dir=None, root_model_dir=None):
+def get_run_metadata(firex_logs_dir=None, root_model_dir=None):
     run_metadata_file = get_run_metadata_file(firex_logs_dir, root_model_dir)
     if os.path.isfile(run_metadata_file):
-        return json.loads(Path(run_metadata_file).read_text()).get('flame_url', None)
+        return json.loads(Path(run_metadata_file).read_text())
     return None
+
+
+def get_flame_url(firex_logs_dir=None, root_model_dir=None):
+    return get_run_metadata(firex_logs_dir, root_model_dir).get('flame_url', None)
 
 
 def get_tasks_slim_file(firex_logs_dir=None, root_model_dir=None):

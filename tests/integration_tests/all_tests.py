@@ -27,7 +27,8 @@ from firex_flame.flame_helper import get_flame_pid, wait_until_pid_not_exist, wa
     kill_flame, kill_and_wait, json_file_fn, wait_until_path_exist, deep_merge, wait_until_web_request_ok
 from firex_flame.event_aggregator import INCOMPLETE_STATES, COMPLETE_STATES
 from firex_flame.model_dumper import get_tasks_slim_file, get_model_full_tasks_by_names, is_dump_complete, \
-    get_run_metadata_file, get_flame_url, find_flame_model_dir, load_task_representation, load_slim_tasks
+    get_run_metadata_file, get_flame_url, find_flame_model_dir, load_task_representation, load_slim_tasks, \
+    get_run_metadata
 
 
 test_data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
@@ -170,6 +171,9 @@ class FlameSigintShutdownTest(FlameFlowTestConfiguration):
         assert psutil.pid_exists(flame_pid), "Flame pid should exist before being killed by SIGINT."
         kill_flame(log_dir, sig=signal.SIGINT)
         assert not psutil.pid_exists(flame_pid), "SIGINT should have caused flame to terminate, but pid still exists."
+        run_metadata = get_run_metadata(firex_logs_dir=log_dir)
+        assert run_metadata['flame_recv_complete'], \
+            "Expected Flame's receiving thread to have completed gracefully on SIGINT"
 
 
 def wait_until_root_exists(log_dir, timeout=20, sleep_for=1):

@@ -95,6 +95,7 @@ class RunningModelDumper:
             self._queue.put((self.TASK_DUMP_TYPE, task_uuid, event_type))
 
     def write_remaining_and_wait_stop(self):
+        self.queue_write_slim()
         self._queue.put((self.ALL_WITHOUT_COMPLETED_DUMP_TYPE, None, None))
         self._queue.put((self.STOP_DUMP_TYPE, None, None))
         self.greenlet.join()
@@ -181,6 +182,10 @@ class BrokerEventConsumerThread(threading.Thread):
             except Exception:
                 if self.event_aggregator.is_root_complete():
                     logger.info("Root task complete; stopping broker receiver (not entire server).")
+                    return
+                if self.shutdown_handler.shutdown_received:
+                    self.stopped_externally = True
+                    logger.info("Shutdown handler received shutdown request; stopping broker receiver.")
                     return
                 logger.error(traceback.format_exc())
                 if try_interval > self.max_try_interval:

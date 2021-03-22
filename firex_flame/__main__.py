@@ -74,6 +74,7 @@ def _parse_args():
 class ShutdownHandler:
 
     def __init__(self):
+        self.shutdown_received = False
         self.web_server = None
         signal.signal(signal.SIGTERM, self.sigterm_handler)
         signal.signal(signal.SIGINT, self.sigint_handler)
@@ -90,17 +91,14 @@ class ShutdownHandler:
         self.shutdown('timeout exceeded')
 
     def shutdown(self, reason):
+        self.shutdown_received = True
         logging.info("Stopping entire Flame Server for reason: %s" % reason)
-        # TODO: shutdowns that occur while the broker is still receiving events will not have the data model dumped,
-        #  since that's currently exclusively the responsibility of the broker processor. This shutdown method
-        #  should do a 'dump complete if not already dumped' and handle concurrency issues, but only when a broker
-        #  is present (i.e. not when replaying a recording). Generating the dumped model while processing events
-        #  mitigates but does not eliminate this issue.
 
         # Avoid race condition where webserver is started immediately after shutdown is called.
         wait_until(lambda: self.web_server is not None, timeout=5, sleep_for=0.5)
         if self.web_server:
             self.web_server.stop()
+
         # lazy load this module for startup performance.
         from firex_flame.api import term_all_subprocs
         term_all_subprocs()
@@ -164,7 +162,8 @@ def main():
         logger.info('Starting Flame Server with args: %s' % args)
         web_server = start_flame(args.port, create_broker_processor_config(args),
                                  _create_run_metadata(args), args.recording, shutdown_handler,
-                                 args.extra_task_dump_paths.split(',') if args.extra_task_dump_paths else [],
+                                 args.extra_task_dump_paths.split(
+                                     ',') if args.extra_task_dump_paths else [],
                                  args.serve_logs_dir)
         # Allow the shutdown handler to stop the web server before we serve_forever.
         shutdown_handler.web_server = web_server
