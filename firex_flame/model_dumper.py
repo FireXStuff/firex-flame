@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 import tarfile
 
+from gevent.fileobject import FileObject
+
 from firex_flame.event_aggregator import slim_tasks_by_uuid, COMPLETE_STATES
 from firex_flame.flame_helper import get_flame_debug_dir, query_full_tasks
 
@@ -12,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 def _truncating_write_json(file, data):
     with open(file, 'w') as f:
-        json.dump(data, fp=f, sort_keys=True, indent=2)
+        json.dump(data, fp=FileObject(file, 'w'), sort_keys=True, indent=2)
 
 
 def get_flame_model_dir(firex_logs_dir):

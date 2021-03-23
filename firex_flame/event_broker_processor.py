@@ -10,7 +10,7 @@ import json
 import time
 
 from celery.events import EventReceiver
-from gevent import spawn
+from gevent import spawn, sleep
 from gevent.queue import JoinableQueue
 
 from firex_flame.controller import FlameAppController
@@ -86,6 +86,8 @@ class RunningModelDumper:
                 logger.exception(e)
             finally:
                 self._queue.task_done()
+                sleep() # Let other greenlets run.
+
 
     def queue_write_slim(self):
         self._queue.put((self.SLIM_DUMP_TYPE, None, None))
