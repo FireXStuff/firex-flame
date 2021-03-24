@@ -29,9 +29,13 @@ class RunningModelDumper:
     TASK_DUMP_TYPE = 'TASK'
     STOP_DUMP_TYPE = 'STOP'
     ALL_WITHOUT_COMPLETED_DUMP_TYPE = 'ALL_WITHOUT_COMPLETED'
+    ALL_DUMP_TYPES = {SLIM_DUMP_TYPE, TASK_DUMP_TYPE, STOP_DUMP_TYPE, ALL_WITHOUT_COMPLETED_DUMP_TYPE}
 
     def __init__(self,  flame_controller: FlameAppController, all_tasks_by_uuid):
         self.flame_controller = flame_controller
+
+        # This is a JoinableQueue just to make testing easier. Clients will wait on the greenlet that processes
+        # queue items, not the queue itself.
         self._queue = JoinableQueue()
         self.all_tasks_by_uuid = all_tasks_by_uuid
 
@@ -42,10 +46,13 @@ class RunningModelDumper:
         # after 'task-completed' will cause an additional write, since we don't know what can come after. This
         # is less than ideal.
         self.seen_task_completed_uuids = set()
-        self.greenlet = spawn(self._run)
+        self._greenlet = spawn(self._consume_from_queue)
 
     def _dump_full_task(self, uuid, task):
-        self.flame_controller.dump_full_task(uuid, task)
+        try:
+            self.flame_controller.dump_full_task(uuid, task)
+        except OSError as e:
+            logger.warning(f"Failed to write {uuid} full task JSON: {e}")
 
     def _maybe_dump_task(self, uuid, event_type):
         if uuid in self.all_tasks_by_uuid:
@@ -58,36 +65,62 @@ class RunningModelDumper:
         else:
             logger.warning(f"Failed to write non-existant task with uuid: {uuid}")
 
-    def _run(self):
-        # FIXME: there is a performance optimization here to read all current entries in the queue (entry count
-        #  via len()), then de-duplicate work (e.g. write only once for all SLIM_DUMP_TYPE entries, write each task UUID
-        #  once (being considerate of any 'task-completed' entries, etc).
+    def _deduplicate_and_maybe_write_full_tasks(self, task_dump_work_items):
+        deduplicated_task_uuid_to_event_type = {}
+        for task_work_item in task_dump_work_items:
+            uuid = task_work_item[1]
+            event_type = task_work_item[2]
+            assert uuid is not None, "Must have task UUID for TASK_DUMP_TYPE"
+            assert event_type is not None, "Must have event type for TASK_DUMP_TYPE"
+
+            # Never change away from task-completed, since we need to track if we've ever seen this type,
+            # per task, to reduce total full task writes.
+            if deduplicated_task_uuid_to_event_type.get(uuid) != 'task-completed':
+                deduplicated_task_uuid_to_event_type[uuid] = event_type
+
+        for uuid, event_type in deduplicated_task_uuid_to_event_type.items():
+            self._maybe_dump_task(uuid, event_type)
+
+    def _consume_from_queue(self):
         while True:
-            dump_type, maybe_uuid, maybe_event_type = self._queue.get()
+            triplet = self._queue.get()
+
+            # drain queue and process all work items at once, de-duplicating work.
+            work_items = [triplet] + [self._queue.get() for _ in range(len(self._queue))]
+            work_item_types = {t[0] for t in work_items}
+
             try:
-                if dump_type == self.SLIM_DUMP_TYPE:
+                if self.SLIM_DUMP_TYPE in work_item_types:
                     self.flame_controller.dump_slim_tasks(self.all_tasks_by_uuid)
-                elif dump_type == self.TASK_DUMP_TYPE:
-                    assert maybe_uuid is not None, "Must have task UUID for TASK_DUMP_TYPE"
-                    assert maybe_event_type is not None, "Must have event type for TASK_DUMP_TYPE"
-                    self._maybe_dump_task(maybe_uuid, maybe_event_type)
-                elif dump_type == self.ALL_WITHOUT_COMPLETED_DUMP_TYPE:
+
+                if self.TASK_DUMP_TYPE in work_item_types:
+                    self._deduplicate_and_maybe_write_full_tasks([t for t in work_items if t[0] == self.TASK_DUMP_TYPE])
+
+                if self.ALL_WITHOUT_COMPLETED_DUMP_TYPE in work_item_types:
                     all_uuids = set(self.all_tasks_by_uuid.keys())
-                    uuids_without_complete = all_uuids.difference(self.seen_task_completed_uuids)
-                    for uuid in uuids_without_complete:
+                    uuids_without_completed = all_uuids.difference(self.seen_task_completed_uuids)
+                    for uuid in uuids_without_completed:
                         self._dump_full_task(uuid, self.all_tasks_by_uuid[uuid])
-                elif dump_type == self.STOP_DUMP_TYPE:
-                    logger.debug(f"Stopping in progress model dumper.")
-                    break
-                else:
-                    logger.warning(f"Unknown in-progress dumper work queue entry with type {dump_type}")
+
+                invalid_dump_types = work_item_types.difference(self.ALL_DUMP_TYPES)
+                for invalid_dump_type in invalid_dump_types:
+                    logger.warning(f"Unknown in-progress dumper work queue entry with type {invalid_dump_type}")
+
             except Exception as e:
+                # TODO: narrow exception handling so that an error in handling of one dump_type doesn't fail others.
                 logger.error("Failure while processing task-dumping work queue entry.")
                 logger.exception(e)
             finally:
-                self._queue.task_done()
-                sleep() # Let other greenlets run.
+                for _ in range(len(work_items)):
+                    self._queue.task_done()
 
+                # Must be last.
+                if self.STOP_DUMP_TYPE in work_item_types:
+                    logger.debug(f"Stopping in progress model dumper.")
+                    break
+
+                # Let other greenlets run, possibly let work accumulate in the queue to allow work de-duplication
+                sleep(0.2)
 
     def queue_write_slim(self):
         self._queue.put((self.SLIM_DUMP_TYPE, None, None))
@@ -100,7 +133,7 @@ class RunningModelDumper:
         self.queue_write_slim()
         self._queue.put((self.ALL_WITHOUT_COMPLETED_DUMP_TYPE, None, None))
         self._queue.put((self.STOP_DUMP_TYPE, None, None))
-        self.greenlet.join()
+        self._greenlet.join() # Wait for queue to drain.
 
 class BrokerEventConsumerThread(threading.Thread):
     """Events threading class
