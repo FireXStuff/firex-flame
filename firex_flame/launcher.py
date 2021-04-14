@@ -12,6 +12,7 @@ from firexapp.submit.install_configs import FireXInstallConfigs
 from firex_flame.flame_helper import DEFAULT_FLAME_TIMEOUT, get_flame_debug_dir, get_rec_file, is_json_file, \
     get_flame_redirect_file_path
 from firex_flame.model_dumper import is_dump_complete, get_run_metadata_file, get_flame_url
+from firexapp.discovery import PkgVersionInfo
 
 logger = setup_console_logging(__name__)
 
@@ -170,3 +171,9 @@ class FlameLauncher(TrackingService):
     def get_version(self):
         import firex_flame
         return firex_flame.__version__
+
+    def get_pkg_version_info(self) -> PkgVersionInfo:
+        import firex_flame
+        return PkgVersionInfo(pkg=firex_flame.__package__,
+                              version=firex_flame.__version__,
+                              commit=firex_flame._version.get_versions()['full-revisionid'])
