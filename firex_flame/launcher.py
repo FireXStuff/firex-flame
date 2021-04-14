@@ -168,10 +168,6 @@ class FlameLauncher(TrackingService):
             return get_flame_url(firex_logs_dir=self.firex_logs_dir)
         return self.install_configs.run_url
 
-    def get_version(self):
-        import firex_flame
-        return firex_flame.__version__
-
     def get_pkg_version_info(self) -> PkgVersionInfo:
         import firex_flame
         return PkgVersionInfo(pkg=firex_flame.__package__,
