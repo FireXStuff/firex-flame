@@ -19,7 +19,7 @@ setup(name='firex_flame',
             "Flask-AutoIndex==0.6.4",
             "Werkzeug==0.16.1",
             "python-socketio==4.1.0",
-            "python-engineio==3.10.0", #  3.11.0 causes launch crash when tornado dependency isn't present.
+            "python-engineio==3.10.0", # 3.11.0 causes launch crash when tornado dependency isn't present.
             'firexapp',
             # Middle UI version number indicates expected server API version.
             # e.g 0.20.x means this server adheres to contract version 0.20 between UI and server.
@@ -29,6 +29,7 @@ setup(name='firex_flame',
             "paramiko",
             "gevent-websocket",
             "gevent",
+            "importlib-resources",
       ],
       package_data={
         'firex_flame': ['templates/*.html'],
