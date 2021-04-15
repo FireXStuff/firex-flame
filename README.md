@@ -4,7 +4,7 @@ Flame is a lighweight server that collects, serves and presents data from a Fire
 If you are not already familiar with FireX, it's worthwhile [reading the docs](http://www.firexapp.com/)
  before continuing here. 
 Though Flame serves the Flame UI, documentation for the UI itself [can be found here](https://github.com/FireXStuff/firex-flame-ui). 
-This documentation focuses only on responsibilities of the Flame server.
+This documentation focuses only on responsibilities of the Flame server, not the flame UI.
 
 Briefy, FireX is a general-purpose automation platform that affords task definition and execution 
 by writing lightly annotated Python code. 
