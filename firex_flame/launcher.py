@@ -168,8 +168,9 @@ class FlameLauncher(TrackingService):
             return get_flame_url(firex_logs_dir=self.firex_logs_dir)
         return self.install_configs.run_url
 
-    def get_pkg_version_info(self) -> PkgVersionInfo:
+    @staticmethod
+    def get_pkg_version_info() -> PkgVersionInfo:
         import firex_flame
-        return PkgVersionInfo(pkg=firex_flame.__package__,
+        return PkgVersionInfo(pkg='firex-flame',
                               version=firex_flame.__version__,
                               commit=firex_flame._version.get_versions()['full-revisionid'])
