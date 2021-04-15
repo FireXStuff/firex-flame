@@ -28,7 +28,7 @@ else:
     # Load UI from pypi install case.
     file_manager = ExitStack()
     atexit.register(file_manager.close)
-    UI_RESOURCE_DIR = str(file_manager.enter_context(importlib_resources.path('firex_flame_ui', '')))
+    UI_RESOURCE_DIR = str(file_manager.enter_context(importlib_resources.files('firex_flame_ui')))
 
 REL_UI_RESOURCE_PATH = '/ui'
 
