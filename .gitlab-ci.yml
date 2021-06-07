@@ -37,8 +37,8 @@ build-docs:
     - firex-build docs
   artifacts:
     paths:
-      - html/ 
-      
+      - html/
+
 test-unit:
   stage: test
   script:
@@ -53,7 +53,7 @@ test-integration:
     - pip install --upgrade firex-bundle-ci
     - pip install firex-keeper
     - sudo /usr/sbin/sshd
-    - firexapp submit --chain RunAllIntegrationTests --public_runs True --install_configs cloud-ci-install-configs.json --sync
+    - firexapp submit --chain RunAllIntegrationTests --public_runs True --install_configs cloud-ci-install-configs.json --sync --coverage False
   artifacts:
     paths:
       - flow_test_results/
@@ -66,7 +66,7 @@ upload-codecov:
   artifacts:
     reports:
       cobertura: coverage.xml
-      
+
 upload-results:
   inherit:
     default: false
@@ -84,7 +84,7 @@ upload-pkg:
     - firex-build upload_pip
   only:
     - tags
-    
+
 update-docs:
   inherit:
     default: false
