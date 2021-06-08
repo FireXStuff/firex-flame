@@ -164,9 +164,15 @@ class FlameSigintShutdownTest(FlameFlowTestConfiguration):
     flame_terminate_on_complete = False
 
     def initial_firex_options(self) -> list:
-        return ["submit", "--chain", 'sleep']
+        return ["submit", "--chain", 'nop']
 
     def assert_on_flame_url(self, log_dir, flame_url):
+        # Test sigint works after run has completed (i.e. after redis is gone).
+        from firexapp.broker_manager.redis_manager import RedisManager
+        redis_pid_file = RedisManager.get_pid_file(log_dir)
+        redis_pid_gone = wait_until(lambda: not os.path.isfile(redis_pid_file), timeout=15, sleep_for=1)
+        assert redis_pid_gone, "Expected redis pid to be gone by now due to run completion."
+
         flame_pid = get_flame_pid(log_dir)
         assert psutil.pid_exists(flame_pid), "Flame pid should exist before being killed by SIGINT."
         kill_flame(log_dir, sig=signal.SIGINT)
