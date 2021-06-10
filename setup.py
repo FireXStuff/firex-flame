@@ -15,11 +15,15 @@ setup(name='firex_flame',
       packages=find_packages(),
       zip_safe=True,
       install_requires=[
-            "Flask==1.0.2",
-            "Flask-AutoIndex==0.6.4",
-            "Werkzeug==0.16.1",
-            "python-socketio==4.1.0",
-            "python-engineio==3.10.0", # 3.11.0 causes launch crash when tornado dependency isn't present.
+            "Flask",
+            "Flask-AutoIndex",
+            "Werkzeug",
+
+            # Be very careful changing socketio/engineio versions, as even middle numbers have included breakages in the past.
+            # Always test version changes of socketio/engineio against the target UI version of socketio-client.
+            "python-socketio==4.1.0", #  target 5.3.0 when updating UI socketio client version
+            "python-engineio==3.10.0", #  target 4.2.0 when updating UI socketio client version
+
             'firexapp',
             # Middle UI version number indicates expected server API version.
             # e.g 0.20.x means this server adheres to contract version 0.20 between UI and server.
