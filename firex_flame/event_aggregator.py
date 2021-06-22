@@ -4,6 +4,7 @@ Aggregates events in to the task data model.
 from datetime import datetime
 import logging
 
+from firexkit.task import FIREX_REVOKE_COMPLETE_EVENT_TYPE
 from firexapp.events.model import ADDITIONAL_CHILDREN_KEY, EXTERNAL_COMMANDS_KEY
 
 from firex_flame.flame_helper import deep_merge
@@ -11,6 +12,16 @@ from firex_flame.flame_helper import deep_merge
 logger = logging.getLogger(__name__)
 
 TASK_ARGS = 'firex_bound_args'
+REVOKED_EVENT_TYPE = 'task-revoked'
+
+
+def _event_type_to_task_state(event_type):
+    # Handle both Celery and FireX revoked events as the same state. The FireX event is better because it is sent when the task
+    # is actually completed, so it can't be overriten by other events with state.
+    if event_type == FIREX_REVOKE_COMPLETE_EVENT_TYPE:
+        return REVOKED_EVENT_TYPE
+    return event_type
+
 
 #
 # config field options:
@@ -42,8 +53,9 @@ FIELD_CONFIG = {
     'type': {
         'copy_celery': True,
         'transform_celery': lambda e: {
-            'state': e['type'],
-            'states': [{'state': e['type'], 'timestamp': e.get('local_received', None)}],
+            'state': _event_type_to_task_state(e['type']),
+            'states': [{'state': _event_type_to_task_state(e['type']),
+                        'timestamp': e.get('local_received', None)}],
         } if e['type'] in STATE_TYPES else {},
     },
     'retries': {'copy_celery': True, 'slim_field': True},
@@ -131,8 +143,9 @@ STATE_TYPES = {
     'task-unblocked': {'terminal': False},
     'task-succeeded': {'terminal': True},
     'task-failed': {'terminal': True},
-    'task-revoked': {'terminal': True},
+    REVOKED_EVENT_TYPE: {'terminal': True},
     'task-incomplete': {'terminal': True},  # server-side kludge state to fix tasks that will never complete.
+    FIREX_REVOKE_COMPLETE_EVENT_TYPE: {'terminal': True}
 }
 COMPLETE_STATES = [s for s, v in STATE_TYPES.items() if v['terminal']]
 INCOMPLETE_STATES = [s for s, v in STATE_TYPES.items() if not v['terminal']]
