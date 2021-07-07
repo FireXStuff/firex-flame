@@ -124,7 +124,10 @@ class FlameLauncher(TrackingService):
             with open(self.stdout_file, 'w+') as f:
                 subprocess.Popen([qualify_firex_bin("firex_flame")] + flame_args,
                                  stdout=f, stderr=subprocess.STDOUT,
-                                 close_fds=True, env=select_env_vars(['PATH']))
+                                 close_fds=True,
+                                 env=select_env_vars(['PATH']),
+                                 preexec_fn=os.setpgrp, # Avoid SIGINTs sent to FireX by having own process group.
+                                 )
         except Exception as e:
             logger.error("Flame subprocess start failed: %s." % e)
             raise
