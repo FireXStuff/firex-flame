@@ -250,11 +250,11 @@ class FlameRevokeNonExistantUuidTest(FlameFlowTestConfiguration):
         FAILED_EVENT = 'revoke-failed'
 
         @sio_client.on('revoke-success')
-        def revoke_success(_):
+        def revoke_success():
             resp['response'] = 'revoke-success'
 
         @sio_client.on(FAILED_EVENT)
-        def revoke_failed(_):
+        def revoke_failed():
             resp['response'] = FAILED_EVENT
 
         sio_client.connect(flame_url)
@@ -289,11 +289,11 @@ class FlameRevokeSuccessTest(FlameFlowTestConfiguration):
         SUCCESS_EVENT = 'revoke-success'
 
         @sio_client.on(SUCCESS_EVENT)
-        def revoke_success(_):
+        def revoke_success():
             resp['response'] = SUCCESS_EVENT
 
         @sio_client.on('revoke-failed')
-        def revoke_failed(_):
+        def revoke_failed():
             resp['response'] = 'revoke-failed'
 
         sio_client.connect(flame_url)
