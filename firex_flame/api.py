@@ -4,7 +4,7 @@ Flask API module for interacting with celery tasks.
 
 import logging
 
-from flask import jsonify
+from flask import jsonify, request
 from gevent import spawn, sleep
 from socket import gethostname
 import os
@@ -278,37 +278,64 @@ def create_rest_task_api(web_app, event_aggregator, run_metadata):
         return jsonify(_run_metadata_to_api_model(run_metadata, event_aggregator.root_uuid))
 
 
-def create_revoke_api(sio_server, web_app, celery_app, tasks):
+def _data_from_environ_path(environ, path, default):
+    if len(path) == 3:
+        if path[0] == 'request' and path[1] == 'headers':
+            header_key = path[2]
+            return  environ.get(f'HTTP_{header_key.upper()}', default)
+    return default
+
+def _data_from_request_path(path, default):
+    if len(path) == 3:
+        if path[0] == 'request' and path[1] == 'headers':
+            header_key = path[2]
+            return  request.headers.get(header_key, default)
+    return default
+
+def create_revoke_api(sio_server, web_app, celery_app, tasks, authed_user_request_path):
+
+    sids_to_details = {}
+    NO_USER = 'nouser'
+
+    @sio_server.event
+    def connect(sid, environ):
+        requester = _data_from_environ_path(
+            environ, authed_user_request_path, NO_USER)
+        sids_to_details[sid] = {
+            'requester': requester,
+        }
+
+    @sio_server.event
+    def disconnect(sid):
+        sids_to_details.pop(sid, None)
 
     @sio_server.on('revoke-task')
     def socketio_revoke_task(sid, uuid):
-        logger.info("Received SocketIO request to revoke %s" % uuid)
-        revoked = _revoke_task(uuid)
+        requester = sids_to_details[sid].get('requester', NO_USER)
+        revoked = _revoke_task(uuid, 'SocketIO', requester)
         response_event = 'revoke-success' if revoked else 'revoke-failed'
         sio_server.emit(response_event, room=sid)
 
     @web_app.route('/api/revoke/<uuid>')
     def rest_revoke_task(uuid):
-        logger.info("Received REST request to revoke %s" % uuid)
-        revoked = _revoke_task(uuid)
+        user = _data_from_request_path(authed_user_request_path, NO_USER)
+        revoked = _revoke_task(uuid, 'REST', user)
         return '', 200 if revoked else 500
 
     def _wait_until_task_complete(task, timeout, sleep_for=1):
         wait_until(lambda t: t['state'] not in INCOMPLETE_STATES, timeout, sleep_for, task)
 
-    def _revoke_task(uuid):
+    def _revoke_task(uuid, type, user):
+        logger.info(f"Received {type} request to revoke {uuid} from user {user}")
         if uuid not in tasks:
             return False
 
-        # Get the task instance
         task = tasks[uuid]
-
-        # Try to revoke the task
         if task['state'] in INCOMPLETE_STATES:
             celery_app.control.revoke(uuid, terminate=True)
-            logger.info("Submitted revoke to celery for: %s" % uuid)
+            logger.info(f"Submitted revoke to celery for: {uuid}")
         else:
-            logger.info("Task %s already in terminal state %s" % (uuid, task['state']))
+            logger.info(f"Task {uuid} already in terminal state {task['state']}")
 
         # Wait for the task to become revoked
         revoke_timeout = 10

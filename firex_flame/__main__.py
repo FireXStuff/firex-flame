@@ -17,7 +17,7 @@ from threading import Timer
 
 from firex_flame.main_app import start_flame
 from firex_flame.flame_helper import get_flame_debug_dir, get_flame_pid_file_path, DEFAULT_FLAME_TIMEOUT, \
-    BrokerConsumerConfig, get_flame_url, wait_until
+    BrokerConsumerConfig, get_flame_url, wait_until, FlameServerConfig
 # Prevent dependencies from taking module loading hit of pkg_resources.
 from firexapp.submit.submit import OptionalBoolean
 
@@ -61,6 +61,9 @@ def _parse_args():
                         default=None, const=True, nargs='?', action=OptionalBoolean)
     parser.add_argument('--extra_task_dump_paths',
                         help='Path to files specifying alternate task dump formats.',
+                        type=str, default='')
+    parser.add_argument('--authed_user_request_path',
+                        help='Dot-delimited path specifying where the web server can find the authed user.',
                         type=str, default='')
     parser.add_argument('--serve_logs_dir',
                         help='Whether or not the Flame web server should make the logs_dir of the run available via '
@@ -151,6 +154,23 @@ class NoopTimer:
         pass
 
 
+def _create_server_config(args) -> FlameServerConfig:
+    if args.extra_task_dump_paths:
+        extra_task_dump_paths = args.extra_task_dump_paths.split(',')
+    else:
+        extra_task_dump_paths = []
+    if args.authed_user_request_path:
+        authed_user_request_path = args.authed_user_request_path.split('.')
+    else:
+        authed_user_request_path = []
+    return FlameServerConfig(
+        webapp_port=args.port,
+        serve_logs_dir=args.serve_logs_dir,
+        recording_file=args.recording,
+        extra_task_dump_paths=extra_task_dump_paths,
+        authed_user_request_path=authed_user_request_path
+    )
+
 def main():
     shutdown_handler = ShutdownHandler()
 
@@ -160,11 +180,12 @@ def main():
     try:
         t.start()
         logger.info('Starting Flame Server with args: %s' % args)
-        web_server = start_flame(args.port, create_broker_processor_config(args),
-                                 _create_run_metadata(args), args.recording, shutdown_handler,
-                                 args.extra_task_dump_paths.split(
-                                     ',') if args.extra_task_dump_paths else [],
-                                 args.serve_logs_dir)
+        web_server = start_flame(
+            _create_server_config(args),
+            create_broker_processor_config(args),
+            _create_run_metadata(args),
+            shutdown_handler,
+        )
         # Allow the shutdown handler to stop the web server before we serve_forever.
         shutdown_handler.web_server = web_server
         print(f"Flame server running on: {get_flame_url(web_server.server_port)}")

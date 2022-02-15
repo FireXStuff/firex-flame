@@ -6,6 +6,8 @@ import psutil
 import time
 import signal
 from collections import namedtuple
+from dataclasses import dataclass
+from typing import Optional, List
 
 from firexapp.events.model import ADDITIONAL_CHILDREN_KEY
 from firexapp.submit.uid import Uid
@@ -19,6 +21,15 @@ DEFAULT_FLAME_TIMEOUT = 60 * 60 * 24 * 2
 # TODO: If further performance enhancements are sought, this structure could be maintained during event receiving
 #  so that it isn't re-calculated per task query.
 FlameTaskGraph = namedtuple('FlameTaskGraph', ['tasks_by_uuid', 'ancestors_by_uuid', 'descendants_by_uuid'])
+
+
+@dataclass(frozen=True)
+class FlameServerConfig:
+    webapp_port: int
+    serve_logs_dir: bool
+    recording_file: Optional[str]
+    extra_task_dump_paths: List[str]
+    authed_user_request_path: List[str]
 
 
 def get_flame_redirect_file_path(root_logs_dir):

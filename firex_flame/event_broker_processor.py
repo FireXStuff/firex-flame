@@ -8,6 +8,7 @@ import threading
 import traceback
 import json
 import time
+from typing import Set, Optional
 
 from celery.events import EventReceiver
 from gevent import spawn, sleep
@@ -45,7 +46,7 @@ class RunningModelDumper:
         # latest event type is 'task-completed', since 'task-succeeded' can occur after 'task-completed'. Every event
         # after 'task-completed' will cause an additional write, since we don't know what can come after. This
         # is less than ideal.
-        self.seen_task_completed_uuids = set()
+        self.seen_task_completed_uuids : Set[str] = set()
         self._greenlet = spawn(self._consume_from_queue)
 
     def _dump_full_task(self, uuid, task):
@@ -149,6 +150,8 @@ class BrokerEventConsumerThread(threading.Thread):
         self.terminate_on_complete = config.terminate_on_complete
         self.stopped_externally = False
         self.shutdown_handler = shutdown_handler
+
+        self.receiver_ready_file : Optional[Path]
 
         if config.receiver_ready_file:
             self.receiver_ready_file = Path(config.receiver_ready_file)

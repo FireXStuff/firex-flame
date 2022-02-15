@@ -41,6 +41,7 @@ def get_flame_args(uid, broker_recv_ready_file, args):
         'firex_bin_path': args.firex_bin_path,
         'extra_task_dump_paths': args.flame_extra_task_dump_paths,
         'serve_logs_dir': args.flame_serve_logs_dir,
+        'authed_user_request_path': args.flame_authed_user_request_path,
     }
     result = []
     for k, v in cmd_args.items():
@@ -98,6 +99,7 @@ class FlameLauncher(TrackingService):
         arg_parser.add_argument('--flame_extra_task_dump_paths',
                                 help='Paths specifying alternative task represetnation to dump at end of flame.',
                                 default=None)
+        arg_parser.add_argument('--flame_authed_user_request_path', default=None)
         arg_parser.add_argument('--flame_serve_logs_dir',
                                 help="Control if the Flame server makes the run's logs_dir available via HTTP(S).",
                                 type=lambda x: bool(distutils.util.strtobool(x)),
