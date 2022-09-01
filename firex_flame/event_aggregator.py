@@ -111,6 +111,9 @@ FIELD_CONFIG = {
         'copy_celery': True,
         'slim_field': True,
     },
+    'cached_result_from': {
+        'copy_celery': True,
+    }
 }
 
 
