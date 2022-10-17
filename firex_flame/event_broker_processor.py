@@ -58,8 +58,10 @@ class RunningModelDumper:
     def _maybe_dump_task(self, uuid, event_type):
         if uuid in self.all_tasks_by_uuid:
             task = self.all_tasks_by_uuid[uuid]
-            if (event_type in ['task-started-info', 'task-completed']
-                    or uuid in self.seen_task_completed_uuids):
+            if (
+                event_type in ['task-started-info', 'task-completed']
+                or uuid in self.seen_task_completed_uuids
+            ):
                 self._dump_full_task(uuid, task)
                 if event_type == 'task-completed':
                     self.seen_task_completed_uuids.add(uuid)
@@ -95,7 +97,9 @@ class RunningModelDumper:
                     self.flame_controller.dump_slim_tasks(self.all_tasks_by_uuid)
 
                 if self.TASK_DUMP_TYPE in work_item_types:
-                    self._deduplicate_and_maybe_write_full_tasks([t for t in work_items if t[0] == self.TASK_DUMP_TYPE])
+                    self._deduplicate_and_maybe_write_full_tasks(
+                        [t for t in work_items if t[0] == self.TASK_DUMP_TYPE],
+                    )
 
                 if self.ALL_WITHOUT_COMPLETED_DUMP_TYPE in work_item_types:
                     all_uuids = set(self.all_tasks_by_uuid.keys())
@@ -115,7 +119,8 @@ class RunningModelDumper:
                 for _ in range(len(work_items)):
                     self._queue.task_done()
 
-                # Must be last.
+                # Must be last, want to process all other work items before we stop processing all future
+                # work items.
                 if self.STOP_DUMP_TYPE in work_item_types:
                     logger.debug(f"Stopping in progress model dumper.")
                     break
@@ -150,6 +155,7 @@ class BrokerEventConsumerThread(threading.Thread):
         self.terminate_on_complete = config.terminate_on_complete
         self.stopped_externally = False
         self.shutdown_handler = shutdown_handler
+        self._event_count = 0
 
         self.receiver_ready_file : Optional[Path]
 
@@ -194,7 +200,7 @@ class BrokerEventConsumerThread(threading.Thread):
                 self.shutdown_handler.shutdown("Terminating on completion, as requested by input args.")
 
     def _run_from_broker(self):
-        """Load the events from celery"""
+        """Listen for events from celery"""
         try:
             self._capture_events()
         finally:
@@ -244,6 +250,12 @@ class BrokerEventConsumerThread(threading.Thread):
             with open(self.recording_file, "a") as rec:
                 event_line = json.dumps(event)
                 rec.write(event_line + "\n")
+
+        if self._event_count % 100 == 0:
+            logger.debug(f'Received Celery event number {self._event_count}'
+                         f' with task uuid: {event.get("uuid")}')
+            self._event_count += 1
+
         self._aggregate_and_send([event])
 
     def _aggregate_and_send(self, events):
