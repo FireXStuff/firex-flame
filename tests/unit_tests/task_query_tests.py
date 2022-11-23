@@ -150,7 +150,8 @@ class TaskQueryTests(unittest.TestCase):
                     'value': {'uuid': '3'}
                 },
                 'selectDescendants': [
-                    {'type': 'equals', 'value': {'field': 3}},
+                    {'type': 'equals',
+                     'value': {'field': 3}},
                 ]
             },
             {
@@ -163,19 +164,30 @@ class TaskQueryTests(unittest.TestCase):
         all_tasks = {
             '1': {'field': 3, 'parent_id': None, 'uuid': '1'},
             '2': {'field': 3, 'parent_id': '1', 'uuid': '2'},
-            '3': {'field': 3, 'parent_id': '2', 'uuid': '3',
-                  # make self a child and the parent a child.
-                  ADDITIONAL_CHILDREN_KEY: ['2', '3']},
-            '4': {'field': 3, 'parent_id': '4', 'uuid': '4'},
+            '3': {
+                'field': 3, 'parent_id': '2', 'uuid': '3',
+                # make self a child and the parent a child.
+                ADDITIONAL_CHILDREN_KEY: ['2', '3', '5'],
+            },
+            '4': {'field': 3, 'parent_id': '1', 'uuid': '4'},
+            '5': {'field': 3, 'parent_id': '4', 'uuid': '5'},
+            '6': {'field': 3, 'parent_id': '5', 'uuid': '6'},
+            # not in results b/c field != 3
+            '7': {'field': 2, 'parent_id': '3', 'uuid': '7'},
         }
 
         partial_query_result = query_partial_tasks(['3'], queries, all_tasks)
-        expected = {'3': {'uuid': '3',
-                          'descendants': {
-                              # Find 3's parent, since it's an additional_child.
-                              '2': {'uuid': '2'},
-                              # Find 3 itself, since it's an additional_child.
-                              '3': {'uuid': '3'}}}}
+        expected = {
+            '3': {'uuid': '3',
+            'descendants': {
+                # Find 3's parent, since it's an additional_child.
+                '2': {'uuid': '2'},
+                # Find 3 itself, since it's an additional_child.
+                '3': {'uuid': '3'},
+                '5': {'uuid': '5'},
+                '6': {'uuid': '6'},
+            }},
+        }
         self.assertEqual(partial_query_result, expected)
 
         full_query_result = query_full_tasks(all_tasks, queries)

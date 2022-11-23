@@ -202,7 +202,8 @@ def _validate_task_queries(task_representation):
         return False
 
     missing_criterias = [r for r in task_representation
-                         if 'matchCriteria' not in r or not isinstance(r['matchCriteria'], dict)]
+                         if 'matchCriteria' not in r
+                            or not isinstance(r['matchCriteria'], dict)]
     if missing_criterias:
         return False
 
@@ -272,24 +273,8 @@ def _get_paths_from_task(paths, task):
     return r
 
 
-def _get_child_tasks_by_uuid(parent_uuid, all_tasks_by_uuid):
-    return {u: t for u, t in all_tasks_by_uuid.items() if t['parent_id'] == parent_uuid}
-
-
-def _get_descendants(uuid, all_tasks_by_uuid):
-    descendants_by_uuid = _get_child_tasks_by_uuid(uuid, all_tasks_by_uuid)
-    uuids_to_check = list(descendants_by_uuid.keys())
-    while uuids_to_check:
-        cur_descendant_uuid = uuids_to_check.pop()
-        cur_descendant_children_by_uuid = _get_child_tasks_by_uuid(cur_descendant_uuid, all_tasks_by_uuid)
-        descendants_by_uuid.update(cur_descendant_children_by_uuid)
-        uuids_to_check += list(cur_descendant_children_by_uuid.keys())
-
-    return descendants_by_uuid
-
-
 def _get_descendants_for_criteria(select_paths, descendant_criteria, ancestor_uuid, task_graph: FlameTaskGraph):
-    ancestor_descendants = task_graph.descendants_by_uuid[ancestor_uuid]
+    ancestor_descendants = task_graph.descendants_by_uuid.get(ancestor_uuid, set())
     matched_descendants_by_uuid = {}
     for criteria in descendant_criteria:
         for descendant in ancestor_descendants:
@@ -377,25 +362,49 @@ def _create_task_graph(tasks_by_uuid):
             cur_task_ancestor_uuids = ancestor_uuids_by_uuid[cur_task['uuid']]
 
             # The task tree is being walked top-down, so it's safe to expect ancestors to be populated.
-            if cur_task.get('parent_id') is not None and cur_task['parent_id'] in ancestor_uuids_by_uuid:
+            if (cur_task.get('parent_id') is not None
+                and cur_task['parent_id'] in ancestor_uuids_by_uuid):
                 # This task's ancestors are its parent's ancestors plus its parent.
                 ancestor_uuids = ancestor_uuids_by_uuid[cur_task['parent_id']].union([cur_task['parent_id']])
                 cur_task_ancestor_uuids.update(ancestor_uuids)
 
-            # Update ancestors of additional children.
-            additional_children_uuids = cur_task.get(ADDITIONAL_CHILDREN_KEY, [])
-            for additional_child_uuid in additional_children_uuids:
-                if additional_child_uuid not in ancestor_uuids_by_uuid:
-                    ancestor_uuids_by_uuid[additional_child_uuid] = set()
-                ancestor_uuids_by_uuid[additional_child_uuid].update(cur_task_ancestor_uuids)
-
-            descendant_uuids_by_uuid[cur_task['uuid']] = set(additional_children_uuids)
+            descendant_uuids_by_uuid[cur_task['uuid']] = set()
             for ancestor_uuid in cur_task_ancestor_uuids:
                 descendant_uuids_by_uuid[ancestor_uuid].add(cur_task['uuid'])
-                descendant_uuids_by_uuid[ancestor_uuid].update(additional_children_uuids)
 
             # traverse the graph via real children only, not additional_children.
             tasks_to_check.extend(children_by_uuid[cur_task['uuid']])
+
+    #
+    # now that descendant_uuids_by_uuid is populated, add ancestors/descedants
+    # from additional children.
+    #
+    additional_children_uuids_by_uuid = {
+        u: t[ADDITIONAL_CHILDREN_KEY] for u, t in tasks_by_uuid.items()
+        if ADDITIONAL_CHILDREN_KEY in t
+    }
+    for cur_uuid, additional_children_uuids in additional_children_uuids_by_uuid.items():
+        cur_task_ancestor_uuids = ancestor_uuids_by_uuid[cur_uuid]
+
+        for additional_child_uuid in additional_children_uuids:
+            if additional_child_uuid in ancestor_uuids_by_uuid:
+                # additional_child_uuid should be in ancestor_uuids_by_uuid as long as graph is connected
+                # via non-additional parent/child relationships.
+                # Could assert, but it's always possible we miss events that complete the graph.
+                ancestor_uuids_by_uuid[additional_child_uuid].update(cur_task_ancestor_uuids)
+
+            add_desc_uuids = cur_task_ancestor_uuids.union({cur_uuid})
+            for add_desc_uuid in add_desc_uuids:
+                # Add this additional child UUID and all of its descedants to
+                # this ancestor
+                if add_desc_uuid in descendant_uuids_by_uuid:
+                    # add_desc_uuid should be in descendant_uuids_by_uuid as long as graph is connected
+                    # via non-additional parent/child relationships.
+                    # Could assert, but it's always possible we miss events that complete the graph.
+                    descendant_uuids_by_uuid[add_desc_uuid].add(additional_child_uuid)
+                    descendant_uuids_by_uuid[add_desc_uuid].update(
+                        descendant_uuids_by_uuid.get(additional_child_uuid, set())
+                    )
 
     ancestors_by_uuid = {u: [tasks_by_uuid[au] for au in ancestor_uuids if au in tasks_by_uuid]
                          for u, ancestor_uuids in ancestor_uuids_by_uuid.items()}
@@ -448,7 +457,8 @@ def query_full_tasks(all_tasks_by_uuid, task_queries):
 
 def query_partial_tasks(task_uuids_to_query, task_queries, all_tasks_by_uuid):
     # When querying a partial set of tasks, count descendants as matches to be included in the result.
-    return _query_flame_tasks(task_uuids_to_query, task_queries, all_tasks_by_uuid, match_descendant_criteria=True)
+    return _query_flame_tasks(task_uuids_to_query, task_queries, all_tasks_by_uuid,
+                              match_descendant_criteria=True)
 
 
 def get_dict_json_md5(query_config):

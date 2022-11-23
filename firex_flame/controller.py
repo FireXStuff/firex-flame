@@ -7,7 +7,7 @@ from firex_flame.flame_helper import query_partial_tasks, get_dict_json_md5
 logger = logging.getLogger(__name__)
 
 
-def _send_listening_query_sio_event(sio_server, new_data_by_task_uuid, tasks_by_uuid,
+def _send_listening_query_sio_event(sio_server, new_data_by_task_uuid, all_tasks_by_uuid,
                                     listening_query_config_hashes_to_sids):
     for query_hash, query_and_clients in listening_query_config_hashes_to_sids.items():
         # Only bother filtering/emitting the event if there are clients for this query.
@@ -15,7 +15,7 @@ def _send_listening_query_sio_event(sio_server, new_data_by_task_uuid, tasks_by_
             # FIXME: if the new data contains additional children,
             queried_task_data = query_partial_tasks(new_data_by_task_uuid.keys(),
                                                     query_and_clients['query_config'],
-                                                    tasks_by_uuid)
+                                                    all_tasks_by_uuid)
             if queried_task_data:
                 sio_server.emit('tasks-query-update', data=queried_task_data, room=query_hash)
 
