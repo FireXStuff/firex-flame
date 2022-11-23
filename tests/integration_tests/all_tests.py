@@ -445,7 +445,8 @@ class FlameTerminateOnCompleteTest(FlameFlowTestConfiguration):
         assert_flame_web_ok(flame_url, '/alive')
 
         root_task = get_tasks_by_name(log_dir, 'RootTask', expect_single=True)
-        assert_flame_web_ok(flame_url, '/api/revoke/' + root_task['uuid'])
+        revoke_path = f'/api/revoke/{root_task["uuid"]}?revoke_reason=this+is+the+revoke+reason"'
+        assert_flame_web_ok(flame_url, revoke_path)
 
         # Somewhat big timeout since we need to wait for redis to shutdown gracefully, which then causes the
         # the broker processor to shutdown flame gracefully.

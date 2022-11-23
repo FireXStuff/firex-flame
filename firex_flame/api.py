@@ -292,6 +292,18 @@ def _data_from_request_path(path, default):
             return  request.headers.get(header_key, default)
     return default
 
+def _uuid_and_reason_from_revoke_data(revoke_data):
+    if isinstance(revoke_data, str):
+            uuid = revoke_data
+            revoke_reason = None
+    elif isinstance(revoke_data, dict):
+        uuid = revoke_data.get('uuid')
+        revoke_reason = revoke_data.get('revoke_reason')
+    else:
+        uuid = None
+        revoke_reason = None
+    return uuid, revoke_reason
+
 def create_revoke_api(sio_server, web_app, celery_app, tasks, authed_user_request_path):
 
     sids_to_details = {}
@@ -310,23 +322,31 @@ def create_revoke_api(sio_server, web_app, celery_app, tasks, authed_user_reques
         sids_to_details.pop(sid, None)
 
     @sio_server.on('revoke-task')
-    def socketio_revoke_task(sid, uuid):
-        requester = sids_to_details[sid].get('requester', NO_USER)
-        revoked = _revoke_task(uuid, 'SocketIO', requester)
-        response_event = 'revoke-success' if revoked else 'revoke-failed'
+    def socketio_revoke_task(sid, revoke_data):
+        uuid, revoke_reason = _uuid_and_reason_from_revoke_data(revoke_data)
+        if uuid:
+            requester = sids_to_details[sid].get('requester', NO_USER)
+            revoked = _revoke_task(uuid, 'SocketIO', requester, revoke_reason)
+            response_event = 'revoke-success' if revoked else 'revoke-failed'
+        else:
+            response_event = 'revoke-failed'
         sio_server.emit(response_event, room=sid)
 
-    @web_app.route('/api/revoke/<uuid>')
+    @web_app.route('/api/revoke/<uuid>', methods=['GET', 'POST'])
     def rest_revoke_task(uuid):
         user = _data_from_request_path(authed_user_request_path, NO_USER)
-        revoked = _revoke_task(uuid, 'REST', user)
+        revoke_reason = request.args.get('revoke_reason')
+        revoked = _revoke_task(uuid, 'REST', user, revoke_reason)
         return '', 200 if revoked else 500
 
     def _wait_until_task_complete(task, timeout, sleep_for=1):
         wait_until(lambda t: t['state'] not in INCOMPLETE_STATES, timeout, sleep_for, task)
 
-    def _revoke_task(uuid, type, user):
-        logger.info(f"Received {type} request to revoke {uuid} from user {user}")
+    def _revoke_task(uuid, type, user, revoke_reason):
+        msg = f"Received {type} request to revoke {uuid} from user {user}"
+        if revoke_reason:
+            msg += f' with reason: {revoke_reason}'
+        logger.info(msg)
         if uuid not in tasks:
             return False
 

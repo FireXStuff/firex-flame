@@ -256,7 +256,8 @@ class FlameEventAggregator:
                 or not event['uuid']
                 # Revoked events can be sent before any other, and we'll never get any data (name, etc) for that task.
                 # Therefore ignore events that are for a new UUID that have revoked type.
-                or (event['uuid'] not in self.tasks_by_uuid and event.get('type', '') == 'task-revoked')):
+                or (event['uuid'] not in self.tasks_by_uuid
+                    and event.get('type') == 'task-revoked')):
             return {}
 
         if event.get('parent_id', '__no_match') is None and self.root_uuid is None:

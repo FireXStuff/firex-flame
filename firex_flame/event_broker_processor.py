@@ -254,7 +254,7 @@ class BrokerEventConsumerThread(threading.Thread):
         if self._event_count % 100 == 0:
             logger.debug(f'Received Celery event number {self._event_count}'
                          f' with task uuid: {event.get("uuid")}')
-            self._event_count += 1
+        self._event_count += 1
 
         self._aggregate_and_send([event])
 
