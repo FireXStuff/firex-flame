@@ -112,3 +112,25 @@ class EventAggregatorTests(unittest.TestCase):
         # The rule for the celery key 'url' creates a new key 'logs_url'. This test verifies non-celery keys are
         # propagated.
         self.assertEqual('some_url', aggregator.tasks_by_uuid[basic_event['uuid']]['logs_url'])
+
+    def test_late_root_uuid(self):
+        aggregator = FlameEventAggregator()
+
+        root_id = "b954db0d-e308-4cd4-bcd9-dbbed3982067"
+        flame_data = {'key': 'value'}
+        aggregator.aggregate_events([
+            {"freq": 5, "sw_ident": "py-celery", "sw_ver": "9.9.9", "sw_sys": "Linux", "timestamp": 1670605159.61279, "type": "worker-heartbeat", "local_received": 1670605159.613447},
+            {
+                "uuid": "92b47986-7c9e-47b8-8949-bf3c047fd726", "name": "firexapp.submit.report_trigger.RunInitialReport",
+                "root_id": root_id,
+                "parent_id": "b954db0d-e308-4cd4-bcd9-dbbed3982067",
+                "timestamp": 1670605164.6179929, "type": "task-received", "local_received": 1670605164.6221592},
+            {
+                "utcoffset": 8, "pid": 44987, "clock": 1, "uuid": "b954db0d-e308-4cd4-bcd9-dbbed3982067", "timestamp": 1670605164.6242092, "type": "task-started-info", "local_received": 1670605164.6256702},
+            {"uuid": "92b47986-7c9e-47b8-8949-bf3c047fd726", "timestamp": 1670605164.6301577, "type": "task-started", "local_received": 1670605164.6447308},
+            {"uuid": "b954db0d-e308-4cd4-bcd9-dbbed3982067", "timestamp": 1670605164.6375537, "type": "task-send-flame", 'flame_data': flame_data, "local_received": 1670605164.646939},
+        ])
+
+        self.assertEqual(root_id, aggregator.root_uuid)
+        # Make sure subsequent events to root ID are aggregated.
+        self.assertEqual(flame_data, aggregator.tasks_by_uuid[root_id]['flame_data'])

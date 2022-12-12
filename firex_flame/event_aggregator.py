@@ -260,8 +260,13 @@ class FlameEventAggregator:
                     and event.get('type') == 'task-revoked')):
             return {}
 
-        if event.get('parent_id', '__no_match') is None and self.root_uuid is None:
-            self.root_uuid = event['uuid']
+        if self.root_uuid is None:
+            if event.get('parent_id', '__no_match') is None:
+                self.root_uuid = event['uuid']
+            elif event.get('root_id') is not None:
+                # we can still know the root if we miss the first event (the root's event with parent_id)
+                # since other events reference the root UUID via root_id.
+                self.root_uuid = event['root_id']
 
         new_data_by_task_uuid = get_new_event_data(event)
         changes_by_task_uuid = {}
