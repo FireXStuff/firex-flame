@@ -70,6 +70,9 @@ def _parse_args():
                              'HTTP(S).',
                         type=lambda x: bool(distutils.util.strtobool(x)),
                         default=True)
+    parser.add_argument('--wait_for_webserver',
+                        type=lambda x: bool(distutils.util.strtobool(x)),
+                        default=True)
 
     return parser.parse_args()
 
@@ -185,6 +188,7 @@ def main():
             create_broker_processor_config(args),
             _create_run_metadata(args),
             shutdown_handler,
+            args.wait_for_webserver,
         )
         # Allow the shutdown handler to stop the web server before we serve_forever.
         shutdown_handler.web_server = web_server

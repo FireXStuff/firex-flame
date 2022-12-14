@@ -31,7 +31,7 @@ def create_broker_consumer_thread(broker_consumer_config, controller, event_aggr
                                          shutdown_handler)
 
 
-def start_flame(server_config: FlameServerConfig, broker_consumer_config, run_metadata, shutdown_handler):
+def start_flame(server_config: FlameServerConfig, broker_consumer_config, run_metadata, shutdown_handler, wait_for_webserver):
     event_aggregator = FlameEventAggregator()
     controller = FlameAppController(run_metadata, server_config.extra_task_dump_paths)
     recording_file = server_config.recording_file
@@ -44,7 +44,10 @@ def start_flame(server_config: FlameServerConfig, broker_consumer_config, run_me
         celery_app = None
     event_recv_thread.start()
 
-    if broker_consumer_config.receiver_ready_file:
+    # If the client (e.g. main firex process) isn't waiting for the web server and it is waiting for the
+    # receiver to be ready, speed up startup by waiting for the receiver to be ready before loading
+    # any web modules.
+    if not wait_for_webserver and broker_consumer_config.receiver_ready_file:
         wait_until_path_exist(broker_consumer_config.receiver_ready_file, sleep_for=0.1)
 
     # Delaying of importing of all web dependencies is a deliberate startup performance optimization.

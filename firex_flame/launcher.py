@@ -2,6 +2,8 @@ import os
 import subprocess
 import time
 import distutils.util
+import socket
+import time
 
 from firexapp.common import qualify_firex_bin, select_env_vars
 from firexapp.submit.submit import OptionalBoolean
@@ -15,6 +17,13 @@ from firex_flame.model_dumper import is_dump_complete, get_run_metadata_file, ge
 from firexapp.discovery import PkgVersionInfo
 
 logger = setup_console_logging(__name__)
+
+
+def _send_flame_indicate_ready(celery_app):
+    if celery_app:
+        with celery_app.events.default_dispatcher(hostname=socket.gethostname()) as d:
+            # Flame will indicate it's ready for tasks once it gets this Celery event.
+            return d.send('flame-indicate-ready')
 
 
 def get_flame_args(uid, broker_recv_ready_file, args):
@@ -42,6 +51,7 @@ def get_flame_args(uid, broker_recv_ready_file, args):
         'extra_task_dump_paths': args.flame_extra_task_dump_paths,
         'serve_logs_dir': args.flame_serve_logs_dir,
         'authed_user_request_path': args.flame_authed_user_request_path,
+        'wait_for_webserver': args.flame_wait_for_webserver,
     }
     result = []
     for k, v in cmd_args.items():
@@ -61,6 +71,7 @@ class FlameLauncher(TrackingService):
         self.start_time = None
         self.stdout_file = None
         self.wait_for_webserver = None
+        self.celery_app = None
 
     def extra_cli_arguments(self, arg_parser):
         arg_parser.add_argument('--flame_timeout', help='How long the webserver should run for, in seconds.',
@@ -106,8 +117,9 @@ class FlameLauncher(TrackingService):
                                 default=None)
 
 
-    def start(self, args, install_configs: FireXInstallConfigs, uid=None, **kwargs) -> dict:
+    def start(self, args, install_configs: FireXInstallConfigs, uid=None, celery_app=None, **kwargs) -> dict:
         super().start(args, install_configs, uid=uid, **kwargs)
+        self.celery_app = celery_app
 
         flame_debug_dir = get_flame_debug_dir(uid.logs_dir)
         os.makedirs(flame_debug_dir, exist_ok=True)
@@ -138,6 +150,10 @@ class FlameLauncher(TrackingService):
 
     def ready_for_tasks(self, **kwargs) -> bool:
         if not self.is_ready_for_tasks:
+            # Flame will receive this event once its receiving from Celery
+            # and create broker_recv_ready_file
+            _send_flame_indicate_ready(self.celery_app)
+            time.sleep(0.1)
             broker_ready = os.path.isfile(self.broker_recv_ready_file)
 
             if self.wait_for_webserver:

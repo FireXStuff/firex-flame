@@ -144,8 +144,15 @@ class RunningModelDumper:
 class BrokerEventConsumerThread(threading.Thread):
     """Events threading class
     """
-    def __init__(self, celery_app, flame_controller: FlameAppController, event_aggregator, config: BrokerConsumerConfig,
-                 recording_file: str, shutdown_handler):
+    def __init__(
+        self,
+        celery_app,
+        flame_controller: FlameAppController,
+        event_aggregator,
+        config: BrokerConsumerConfig,
+        recording_file: str,
+        shutdown_handler,
+    ):
         threading.Thread.__init__(self, daemon=True)
         self.celery_app = celery_app
         self.recording_file = recording_file
@@ -169,10 +176,8 @@ class BrokerEventConsumerThread(threading.Thread):
         self.running_dumper_queue = RunningModelDumper(self.flame_controller, self.event_aggregator.tasks_by_uuid)
 
     def _create_receiver_ready_file(self):
-        if self.is_first_receive:
-            if self.receiver_ready_file:
-                self.receiver_ready_file.touch()
-            self.is_first_receive = False
+        if self.receiver_ready_file:
+            self.receiver_ready_file.touch()
 
     def _cleanup_tasks(self):
         # Create new events that change the run state of incomplete events.
@@ -184,7 +189,11 @@ class BrokerEventConsumerThread(threading.Thread):
             logger.debug("All tasks already terminal following terminal root.")
 
     def run(self):
-        self._run_from_broker()
+        """Listen for events from celery"""
+        try:
+            self._capture_events()
+        finally:
+            self._cleanup()
 
     def _cleanup(self):
         try:
@@ -199,13 +208,6 @@ class BrokerEventConsumerThread(threading.Thread):
             if self.terminate_on_complete and not self.stopped_externally:
                 self.shutdown_handler.shutdown("Terminating on completion, as requested by input args.")
 
-    def _run_from_broker(self):
-        """Listen for events from celery"""
-        try:
-            self._capture_events()
-        finally:
-            self._cleanup()
-
     def _capture_events(self):
         try_interval = 1
         while not self.event_aggregator.is_root_complete():
@@ -217,7 +219,7 @@ class BrokerEventConsumerThread(threading.Thread):
                                          handlers={"*": self._on_celery_event},
                                          app=self.celery_app)
                     try_interval = 1
-                    self._create_receiver_ready_file()
+
                     recv.capture(limit=None, timeout=None, wakeup=True)
             except (KeyboardInterrupt, SystemExit) as e:
                 self.stopped_externally = True
@@ -236,7 +238,7 @@ class BrokerEventConsumerThread(threading.Thread):
                     logger.warning("Maximum broker retry attempts exceeded, stopping receiver (not entire server)."
                                    " Will no longer retry despite incomplete root task.")
                     return
-                logger.debug("Try interval %d secs, still worth retrying." % try_interval)
+                logger.debug(f"Try interval {try_interval} secs, still worth retrying.")
                 time.sleep(try_interval)
 
     def _on_celery_event(self, event):
@@ -245,6 +247,11 @@ class BrokerEventConsumerThread(threading.Thread):
         Arguments:
             event(dict): The event to aggregate and send downstream.
         """
+        if self.is_first_receive:
+            # Hopefully this is 'flame-indicate-ready' event
+            self._create_receiver_ready_file()
+            self.is_first_receive = False
+
         # Append the event to the recording file if it is specified
         if self.recording_file:
             with open(self.recording_file, "a") as rec:
@@ -264,5 +271,6 @@ class BrokerEventConsumerThread(threading.Thread):
                                                                         self.event_aggregator.tasks_by_uuid)
         if slim_update_data_by_uuid:
             self.running_dumper_queue.queue_write_slim()
-        self.running_dumper_queue.queue_maybe_write_tasks({u: self.event_aggregator.tasks_by_uuid.get(u, {}).get('type')
-                                                           for u in new_data_by_task_uuid.keys()})
+        self.running_dumper_queue.queue_maybe_write_tasks(
+            {u: self.event_aggregator.tasks_by_uuid.get(u, {}).get('type')
+             for u in new_data_by_task_uuid.keys()})
