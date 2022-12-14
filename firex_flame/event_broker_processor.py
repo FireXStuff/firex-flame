@@ -32,6 +32,8 @@ class RunningModelDumper:
     ALL_WITHOUT_COMPLETED_DUMP_TYPE = 'ALL_WITHOUT_COMPLETED'
     ALL_DUMP_TYPES = {SLIM_DUMP_TYPE, TASK_DUMP_TYPE, STOP_DUMP_TYPE, ALL_WITHOUT_COMPLETED_DUMP_TYPE}
 
+    WRITE_EVENT_TYPES = ['task-started', 'task-started-info', 'task-completed']
+
     def __init__(self,  flame_controller: FlameAppController, all_tasks_by_uuid):
         self.flame_controller = flame_controller
 
@@ -59,7 +61,7 @@ class RunningModelDumper:
         if uuid in self.all_tasks_by_uuid:
             task = self.all_tasks_by_uuid[uuid]
             if (
-                event_type in ['task-started-info', 'task-completed']
+                event_type in self.WRITE_EVENT_TYPES
                 or uuid in self.seen_task_completed_uuids
             ):
                 self._dump_full_task(uuid, task)
@@ -76,9 +78,15 @@ class RunningModelDumper:
             assert uuid is not None, "Must have task UUID for TASK_DUMP_TYPE"
             assert event_type is not None, "Must have event type for TASK_DUMP_TYPE"
 
-            # Never change away from task-completed, since we need to track if we've ever seen this type,
-            # per task, to reduce total full task writes.
-            if deduplicated_task_uuid_to_event_type.get(uuid) != 'task-completed':
+            cur_uuid_event_type = deduplicated_task_uuid_to_event_type.get(uuid)
+            if (
+                not cur_uuid_event_type
+                # Never change away from a type that will cause a write
+                or cur_uuid_event_type not in self.WRITE_EVENT_TYPES
+                # always write completed events since we track this to not
+                # miss events that arrive after completed.
+                or event_type == 'task-completed'
+            ):
                 deduplicated_task_uuid_to_event_type[uuid] = event_type
 
         for uuid, event_type in deduplicated_task_uuid_to_event_type.items():

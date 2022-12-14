@@ -251,13 +251,15 @@ class FlameEventAggregator:
         return task, is_new
 
     def _aggregate_event(self, event):
-        if ('uuid' not in event
-                # The uuid can be null, it's unclear what this means but it can't be associated with a task.
-                or not event['uuid']
-                # Revoked events can be sent before any other, and we'll never get any data (name, etc) for that task.
-                # Therefore ignore events that are for a new UUID that have revoked type.
-                or (event['uuid'] not in self.tasks_by_uuid
-                    and event.get('type') == 'task-revoked')):
+        if (
+            # The uuid can be null, it's unclear what this means but the event
+            # can't be associated with a task so dropping is OK.
+            not event.get('uuid')
+            # Revoked events can be sent before any other, and we'll never get any data (name, etc) for that task.
+            # Therefore ignore events that are for a new UUID that have revoked type.
+            or (event['uuid'] not in self.tasks_by_uuid
+                and event.get('type') == 'task-revoked')
+        ):
             return {}
 
         if self.root_uuid is None:
