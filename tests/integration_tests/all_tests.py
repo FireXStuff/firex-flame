@@ -310,6 +310,28 @@ class FlameRevokeSuccessTest(FlameFlowTestConfiguration):
         assert sleep_runstate == 'task-revoked', "Expected sleep runstate to be revoked, was %s" % sleep_runstate
 
 
+class FlameRevokeRootRestSuccessTest(FlameFlowTestConfiguration):
+    """ Uses Flame's REST API to revoke a run. """
+
+    # Don't run with --sync, since this test will revoke the incomplete root task.
+    sync = False
+    no_coverage = True
+
+    def initial_firex_options(self) -> list:
+        # Sleep so that assert_on_flame_url can call revoke while the run is incomplete.
+        return ["submit", "--chain", 'sleep', '--sleep', '90']
+
+    def assert_on_flame_url(self, log_dir, flame_url):
+        root_exists = wait_until_task_name_exists_in_rec(log_dir, 'RootTask')
+        assert root_exists, "Root task doesn't exist in the flame rec file, something is wrong with run."
+
+        revoke_request = requests.get(urllib.parse.urljoin(flame_url, '/api/revoke'))
+        assert revoke_request.ok, f"Unexpected HTTP response to revoke: {revoke_request}"
+
+        root_task = get_tasks_by_name(log_dir, 'RootTask', expect_single=True)
+        assert root_task['state'] == 'task-revoked', f"Expected root runstate to be revoked, was {root_task['state']}"
+
+
 @app.task(bind=True)
 def WaitingParent(self, uid):
     wait_until_path_exist(os.path.join(uid.logs_dir, 'wait_file'), timeout=10, sleep_for=0.5)

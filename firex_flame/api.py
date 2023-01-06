@@ -285,12 +285,12 @@ def _data_from_environ_path(environ, path, default):
             return  environ.get(f'HTTP_{header_key.upper()}', default)
     return default
 
-def _data_from_request_path(path, default):
+def _data_from_request_path(path):
     if len(path) == 3:
         if path[0] == 'request' and path[1] == 'headers':
             header_key = path[2]
-            return  request.headers.get(header_key, default)
-    return default
+            return request.headers.get(header_key)
+    return None
 
 def _uuid_and_reason_from_revoke_data(revoke_data):
     if isinstance(revoke_data, str):
@@ -304,7 +304,14 @@ def _uuid_and_reason_from_revoke_data(revoke_data):
         revoke_reason = None
     return uuid, revoke_reason
 
-def create_revoke_api(sio_server, web_app, celery_app, tasks, authed_user_request_path):
+def create_revoke_api(
+    sio_server,
+    web_app,
+    celery_app,
+    tasks,
+    authed_user_request_path,
+    event_aggregator,
+):
 
     sids_to_details = {}
     NO_USER = 'nouser'
@@ -332,12 +339,25 @@ def create_revoke_api(sio_server, web_app, celery_app, tasks, authed_user_reques
             response_event = 'revoke-failed'
         sio_server.emit(response_event, room=sid)
 
-    @web_app.route('/api/revoke/<uuid>', methods=['GET', 'POST'])
-    def rest_revoke_task(uuid):
-        user = _data_from_request_path(authed_user_request_path, NO_USER)
+    def _rest_revoke_task(uuid):
+        authed_user = _data_from_request_path(authed_user_request_path)
         revoke_reason = request.args.get('revoke_reason')
+        claimed_user = request.args.get('revoking_user')
+
+        user = authed_user or claimed_user or NO_USER
         revoked = _revoke_task(uuid, 'REST', user, revoke_reason)
         return '', 200 if revoked else 500
+
+    @web_app.route('/api/revoke/<uuid>', methods=['GET', 'POST'])
+    def rest_revoke_task(uuid):
+        return _rest_revoke_task(uuid)
+
+    @web_app.route('/api/revoke', methods=['GET', 'POST'])
+    def rest_revoke_root_task():
+        if not event_aggregator.root_uuid:
+            return '', 500
+        logger.debug(f'Revoking entire run via root task UUID: {event_aggregator.root_uuid}')
+        return _rest_revoke_task(event_aggregator.root_uuid)
 
     def _wait_until_task_complete(task, timeout, sleep_for=1):
         wait_until(lambda t: t['state'] not in INCOMPLETE_STATES, timeout, sleep_for, task)

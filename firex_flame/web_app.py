@@ -189,6 +189,8 @@ def start_web_server(server_config: FlameServerConfig, event_aggregator, run_met
             web_app,
             celery_app,
             event_aggregator.tasks_by_uuid,
-            server_config.authed_user_request_path)
+            server_config.authed_user_request_path,
+            event_aggregator,
+        )
 
     return server
