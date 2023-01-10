@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 from firex_flame.event_aggregator import slim_tasks_by_uuid
 from firex_flame.model_dumper import FlameModelDumper
@@ -40,6 +41,7 @@ class FlameAppController:
             # Avoid sending events if there aren't fields the downstream cares about.
             if slim_update_data_by_uuid:
                 self.sio_server.emit('tasks-update', slim_update_data_by_uuid)
+
             _send_listening_query_sio_event(self.sio_server, new_data_by_task_uuid, tasks_by_uuid,
                                             self.listening_query_config_hashes_to_sids)
         return slim_update_data_by_uuid
@@ -48,15 +50,19 @@ class FlameAppController:
         self.model_dumper.dump_metadata(self.run_metadata, root_complete=False, flame_complete=False)
 
     def dump_complete_data_model(self, event_aggregator):
-        # Even broker's running_dumper_queue will dump task JSONs, so no need to dump again.
-        dump_task_jsons = False
-        self.model_dumper.dump_aggregator_complete_data_model(event_aggregator, self.run_metadata,
-                                                              self.extra_task_representations, dump_task_jsons)
+        self.model_dumper.dump_aggregator_complete_data_model(
+            event_aggregator, self.run_metadata, self.extra_task_representations,
+            # Event broker's running_dumper_queue will dump task JSONs, so no need to dump again.
+            dump_task_jsons=False)
+
+    def dump_extra_task_representations(self, tasks_by_uuid) -> None:
+        for repr_file_path in self.extra_task_representations:
+            self.model_dumper.dump_task_representation(tasks_by_uuid, repr_file_path)
 
     def dump_full_task(self, uuid, task):
         self.model_dumper.dump_full_task(uuid, task)
 
-    def dump_slim_tasks(self, all_tasks_by_uuid):
+    def dump_slim_tasks(self, all_tasks_by_uuid: dict[str, Any]) -> None:
         self.model_dumper.dump_slim_tasks(all_tasks_by_uuid)
 
     def add_client_task_query_config(self, sid, query_config):

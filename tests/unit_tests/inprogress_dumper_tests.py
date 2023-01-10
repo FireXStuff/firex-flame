@@ -1,10 +1,16 @@
 import os
 import unittest
 import tempfile
+from pathlib import Path
+import json
 
 from firex_flame.controller import FlameAppController
 from firex_flame.event_broker_processor import RunningModelDumper
-from firex_flame.model_dumper import load_slim_tasks, get_full_task_path, get_tasks_slim_file, load_full_task
+from firex_flame.model_dumper import load_slim_tasks, get_full_task_path, get_tasks_slim_file, load_full_task, \
+    _get_base_model_dir
+from firex_flame.flame_helper import wait_until_path_exist
+
+import gevent
 
 test_data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 
@@ -88,3 +94,60 @@ class TaskQueryTests(unittest.TestCase):
             running_model_dumper._queue.join()
             # After a task-completed, task-blocked will cause updates.
             self.assertEqual(second_updated_task, load_full_task(log_dir, uuid1))
+
+    def test_dump_extra_task_representations(self):
+        with tempfile.TemporaryDirectory() as log_dir:
+            extra_repr = Path(log_dir, 'extra-task-repr-query.json')
+
+            model_file_name = "extra-repr_tasks.json"
+            extra_repr.write_text(
+                json.dumps(
+                    {
+                        "model_file_name": model_file_name,
+                        "task_queries": [
+                            {
+                                "matchCriteria": { "type": "always-select-fields"},
+                                "selectPaths": ["uuid", "name"]
+                            },
+                            {
+                                "matchCriteria": {
+                                    "type": "equals",
+                                    "value": {"name": "hello"}
+                                },
+                                "selectDescendants": [
+                                    {
+                                        "type": "equals",
+                                        "value": {"name": "hello_child"}
+                                    },
+                                ],
+                            },
+                        ]
+                    }
+                )
+            )
+
+            flame_controller = FlameAppController({'logs_dir': log_dir}, [str(extra_repr)])
+            uuid1 = '1'
+            all_tasks_by_uuid = {
+                uuid1: {'uuid': uuid1, 'name': 'hello', 'flame_data': 'some_data', 'parent_id': None},
+            }
+
+            # the model dumper writes extra task representations periodically.
+            RunningModelDumper(flame_controller, all_tasks_by_uuid, max_extra_task_repr_dump_delay=0.1)
+            gevent.sleep(0.1) # allow the extra task dumpr greenlet to run.
+
+            extra_repr_tasks = Path(_get_base_model_dir(log_dir), model_file_name)
+            model_file_exists = wait_until_path_exist(str(extra_repr_tasks))
+            self.assertTrue(model_file_exists)
+
+            first_tasks_repr = json.loads(extra_repr_tasks.read_text())
+            expected_task_repr = {uuid1: {'uuid': uuid1, 'name': 'hello'}}
+            self.assertEqual(expected_task_repr, first_tasks_repr)
+
+            all_tasks_by_uuid['2'] = {'uuid': '2', 'name': 'hello_child', 'parent_id': uuid1}
+
+            gevent.sleep(0.1) # allow the extra task dumpr greenlet to run.
+
+            expected_task_repr[uuid1]['descendants'] = {'2': {'name': 'hello_child', 'uuid': '2'}}
+            second_tasks_repr = json.loads(extra_repr_tasks.read_text())
+            self.assertEqual(expected_task_repr, second_tasks_repr)

@@ -171,7 +171,7 @@ def _both_instance(o1, o2, _type):
     return isinstance(o1, _type) and isinstance(o2, _type)
 
 
-def deep_merge(dict1, dict2):
+def deep_merge(dict1: dict, dict2: dict) -> dict:
     result = dict(dict1)
     for d2_key in dict2:
         if d2_key in dict1:
@@ -347,7 +347,7 @@ def _get_children_by_uuid(tasks_by_uuid):
     return children_by_uuid
 
 
-def _create_task_graph(tasks_by_uuid):
+def _create_task_graph(tasks_by_uuid) -> FlameTaskGraph:
     children_by_uuid = _get_children_by_uuid(tasks_by_uuid)
     descendant_uuids_by_uuid = {}
     ancestor_uuids_by_uuid = {}

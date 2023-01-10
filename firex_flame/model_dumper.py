@@ -169,13 +169,12 @@ class FlameModelDumper:
         _truncating_write_json(metadata_model_file, {**run_metadata, **complete})
         return metadata_model_file
 
-    def dump_aggregator_complete_data_model(self, event_aggregator, run_metadata=None, extra_task_representations=None,
+    def dump_aggregator_complete_data_model(self, event_aggregator, run_metadata=None, extra_task_representations=tuple(),
                                             dump_task_jsons=True):
         self.dump_complete_data_model(event_aggregator.tasks_by_uuid, event_aggregator.root_uuid, run_metadata,
                                       dump_task_jsons)
-        if extra_task_representations:
-            for repr_file_path in extra_task_representations:
-                self.dump_task_representation(event_aggregator.tasks_by_uuid, repr_file_path)
+        for repr_file_path in extra_task_representations:
+            self.dump_task_representation(event_aggregator.tasks_by_uuid, repr_file_path)
         Path(get_model_complete_file(root_model_dir=self.root_model_dir)).touch()
 
     def dump_full_task(self, uuid, task):
