@@ -8,6 +8,7 @@ basic_event_added_fields = {
             'task_num': 1,
             'name': 'SomeTask',
             'first_started': basic_event['local_received'],
+            'latest_timestamp': basic_event['local_received'],
             'states': [{'state': basic_event['type'], 'timestamp': basic_event['local_received']}],
         }
 
