@@ -93,8 +93,11 @@ FIELD_CONFIG = {
         'transform_celery': lambda e: {'logs_url': e['log_filepath']},
     },
     'local_received': {
-        # Note first_started is never overwritten by aggregation.
-        'transform_celery': lambda e: {'first_started': e['local_received']},
+        'transform_celery': lambda e: {
+            # Note first_started is never overwritten by aggregation.
+            'first_started': e['local_received'],
+            'latest_timestamp': e['local_received'],
+        },
     },
     'states': {'aggregate_merge': True},
     'exception_cause_uuid': {'copy_celery': True},
@@ -113,6 +116,9 @@ FIELD_CONFIG = {
     },
     'cached_result_from': {
         'copy_celery': True,
+    },
+    'latest_timestamp': {
+        'slim_field': True,
     }
 }
 
@@ -219,7 +225,7 @@ class FlameEventAggregator:
     def generate_incomplete_events(self):
         """
         Unfortunately, if a run terminates ungracefully, incomplete tasks will never arrive at a
-        terminal runstate. The 'task-incomplete' runstate is a fake (non-backend) terminal runstate
+        terminal runstate. The 'task-incomplete' runstate is a fake (non-Celery) terminal runstate
         that is generated here so that the UI can show a non-incomplete runstate.
         :return:
         """
