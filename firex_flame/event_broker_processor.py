@@ -19,6 +19,7 @@ from gevent.queue import JoinableQueue
 
 from firex_flame.controller import FlameAppController
 from firex_flame.flame_helper import BrokerConsumerConfig
+from firex_flame.event_aggregator import FlameEventAggregator
 
 logger = logging.getLogger(__name__)
 
@@ -191,7 +192,7 @@ class BrokerEventConsumerThread(threading.Thread):
         self,
         celery_app,
         flame_controller: FlameAppController,
-        event_aggregator,
+        event_aggregator : FlameEventAggregator,
         config: BrokerConsumerConfig,
         recording_file: str,
         shutdown_handler,
@@ -206,8 +207,10 @@ class BrokerEventConsumerThread(threading.Thread):
         self.stopped_externally = False
         self.shutdown_handler = shutdown_handler
         self._event_count = 0
+        self.celery_event_receiver : Optional[EventReceiver] = None
 
         self.receiver_ready_file : Optional[Path]
+
 
         if config.receiver_ready_file:
             self.receiver_ready_file = Path(config.receiver_ready_file)
@@ -258,12 +261,13 @@ class BrokerEventConsumerThread(threading.Thread):
                 try_interval *= 2
                 with self.celery_app.connection() as conn:
                     conn.ensure_connection(max_retries=1, interval_start=0)
-                    recv = EventReceiver(conn,
-                                         handlers={"*": self._on_celery_event},
-                                         app=self.celery_app)
+                    self.celery_event_receiver = EventReceiver(
+                        conn,
+                        handlers={"*": self._on_celery_event},
+                        app=self.celery_app)
                     try_interval = 1
 
-                    recv.capture(limit=None, timeout=None, wakeup=True)
+                    self.celery_event_receiver.capture(limit=None, timeout=None, wakeup=True)
             except (KeyboardInterrupt, SystemExit) as e:
                 self.stopped_externally = True
                 self.shutdown_handler.shutdown(str(e))
@@ -307,6 +311,21 @@ class BrokerEventConsumerThread(threading.Thread):
         self._event_count += 1
 
         self._aggregate_and_send([event])
+
+        try:
+            if (
+                self.event_aggregator.is_root_complete()
+                # In case checking all tests is expensive, check root first. Remaining
+                # tasks only need to be checked once root is complete since everything
+                # can't be complete if the root is not complete.
+                and self.event_aggregator.all_tasks_complete()
+                and self.celery_event_receiver
+            ):
+                logger.info("Stopping Celery event receiver because all tasks are complete.")
+                self.celery_event_receiver.should_stop = True
+        except Exception as e:
+            logger.exception(e)
+            raise
 
     def _aggregate_and_send(self, events):
         new_data_by_task_uuid = self.event_aggregator.aggregate_events(events)

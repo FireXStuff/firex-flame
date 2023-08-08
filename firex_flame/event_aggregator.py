@@ -3,6 +3,7 @@ Aggregates events in to the task data model.
 """
 from datetime import datetime
 import logging
+from typing import Any, Optional
 
 from firexkit.task import FIREX_REVOKE_COMPLETE_EVENT_TYPE
 from firexapp.events.model import ADDITIONAL_CHILDREN_KEY, EXTERNAL_COMMANDS_KEY
@@ -208,9 +209,9 @@ class FlameEventAggregator:
     """ Aggregates many events in to the task data model. """
 
     def __init__(self):
-        self.tasks_by_uuid = {}
-        self.new_task_num = 1
-        self.root_uuid = None
+        self.tasks_by_uuid : dict[str, dict[str, Any]]= {}
+        self.new_task_num : int = 1
+        self.root_uuid : Optional[str] = None
 
     def aggregate_events(self, events):
         new_data_by_task_uuid = {}
@@ -289,3 +290,14 @@ class FlameEventAggregator:
             changes_by_task_uuid[task_uuid] = dict(task) if is_new_task else dict(changed_data)
 
         return changes_by_task_uuid
+
+    def all_tasks_complete(self) -> bool:
+        if not self.tasks_by_uuid:
+            # do not want "no tasks received yet"
+            # to look like "all tasks complete"
+            return False
+
+        return all(
+            t.get('state') in COMPLETE_STATES
+            for t in self.tasks_by_uuid.values()
+        )
