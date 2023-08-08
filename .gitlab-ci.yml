@@ -27,6 +27,8 @@ build:
     - pip install --upgrade firexbuilder
   script:
     - firex-build build --install_test_reqs
+  after_script:
+    - pip freeze
   artifacts:
     paths:
       - dist/
