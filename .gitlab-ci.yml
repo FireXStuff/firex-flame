@@ -28,6 +28,7 @@ build:
   script:
     - firex-build build --install_test_reqs
   after_script:
+    - source venv/bin/activate
     - pip freeze
   artifacts:
     paths:
