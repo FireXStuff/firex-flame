@@ -56,7 +56,7 @@ test-integration:
     - pip install --upgrade firex-bundle-ci
     - pip install firex-keeper
     - sudo /usr/sbin/sshd
-    - firexapp submit --chain RunAllIntegrationTests --public_runs True --install_configs cloud-ci-install-configs.json --sync --coverage False
+    - firexapp submit --chain RunAllIntegrationTests --public_runs True --install_configs cloud-ci-install-configs.json --sync --coverage False --max_parallel_tests 5
   artifacts:
     paths:
       - flow_test_results/
