@@ -64,7 +64,7 @@ FIELD_CONFIG = {
     'chain_depth': {'copy_celery': True, 'slim_field': True},
     'firex_result': {'copy_celery': True},
     'traceback': {'copy_celery': True},
-    'exception': {'copy_celery': True, 'slim_field': True},
+    'exception': {'copy_celery': True},
     'long_name': {
         'copy_celery': True,
         'transform_celery': lambda e: {'name': e['long_name'].split('.')[-1]},
@@ -101,7 +101,10 @@ FIELD_CONFIG = {
         },
     },
     'states': {'aggregate_merge': True},
-    'exception_cause_uuid': {'copy_celery': True},
+    'exception_cause_uuid': {
+        'copy_celery': True,
+        'slim_field': True,
+    },
     EXTERNAL_COMMANDS_KEY: {
         'copy_celery': True,
         'aggregate_merge': True,
@@ -120,7 +123,7 @@ FIELD_CONFIG = {
     },
     'latest_timestamp': {
         'slim_field': True,
-    }
+    },
 }
 
 
