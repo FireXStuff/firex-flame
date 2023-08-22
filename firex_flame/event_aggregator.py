@@ -124,6 +124,9 @@ FIELD_CONFIG = {
     'latest_timestamp': {
         'slim_field': True,
     },
+    'pid': {
+        'copy_celery': True,
+    }
 }
 
 

@@ -211,7 +211,6 @@ class BrokerEventConsumerThread(threading.Thread):
 
         self.receiver_ready_file : Optional[Path]
 
-
         if config.receiver_ready_file:
             self.receiver_ready_file = Path(config.receiver_ready_file)
             assert not self.receiver_ready_file.exists(), \
