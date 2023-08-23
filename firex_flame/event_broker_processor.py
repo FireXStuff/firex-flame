@@ -187,7 +187,7 @@ class RunningModelDumper:
 
 
 def _log_event_received(event, event_count):
-    event_timestamp = event.get('local_received')
+    event_timestamp = event.get('timestamp')
     if event_timestamp:
         lag = time.time() - event_timestamp
         lag_msg = ' (lag: %.2f)' % lag
@@ -196,6 +196,7 @@ def _log_event_received(event, event_count):
     logger.debug(
         f'Received Celery event number {event_count}'
         f' with task uuid: {event.get("uuid")}{lag_msg}')
+
 
 class BrokerEventConsumerThread(threading.Thread):
     """Events threading class
@@ -319,11 +320,13 @@ class BrokerEventConsumerThread(threading.Thread):
             self.is_first_receive = False
 
         # Append the event to the recording file if it is specified
-        if self.open_recording_file is not None:
+        if self.open_recording_file:
             json.dump(event, self.open_recording_file)
             self.open_recording_file.write("\n")
 
         if self._event_count % 100 == 0:
+            if self.open_recording_file:
+                self.open_recording_file.flush()
             _log_event_received(event, self._event_count)
         self._event_count += 1
 

@@ -23,13 +23,12 @@ from firexkit.chain import returns
 from firexkit.task import flame
 
 
-from firex_flame.event_file_processor import get_tasks_from_rec_file
-from firex_flame.flame_helper import get_flame_pid, wait_until_pid_not_exist, wait_until, get_rec_file, filter_paths, \
+from firex_flame.flame_helper import get_flame_pid, wait_until_pid_not_exist, wait_until, \
     kill_flame, kill_and_wait, json_file_fn, wait_until_path_exist, deep_merge, wait_until_web_request_ok
 from firex_flame.event_aggregator import INCOMPLETE_STATES, COMPLETE_STATES
 from firex_flame.model_dumper import get_tasks_slim_file, get_model_full_tasks_by_names, is_dump_complete, \
     get_run_metadata_file, get_flame_url, find_flame_model_dir, load_task_representation, load_slim_tasks, \
-    get_run_metadata
+    get_run_metadata, get_full_tasks_by_slim_pred
 
 
 test_data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
@@ -183,13 +182,10 @@ class FlameSigintShutdownTest(FlameFlowTestConfiguration):
             "Expected Flame's receiving thread to have completed gracefully on SIGINT"
 
 
-def wait_until_root_exists(log_dir, timeout=20, sleep_for=1):
-    return wait_until_rec_tasks_predicate(lambda _, r: r is not None, log_dir, timeout, sleep_for)
-
-
-def wait_until_task_name_exists_in_rec(log_dir, task_name, timeout=20, sleep_for=1):
-    return wait_until_rec_tasks_predicate(lambda ts, _: any(t['name'] == task_name for t in ts.values()),
-                                          log_dir, timeout, sleep_for)
+def wait_until_model_task_name_exists(log_dir, task_name, timeout=20, sleep_for=1):
+    return wait_until_complete_model_tasks_predicate(
+        lambda ts: any(t['name'] == task_name for t in ts.values()),
+        log_dir, timeout, sleep_for)
 
 
 def wait_until_model_task_uuid_complete_runstate(log_dir, timeout=20, sleep_for=1):
@@ -199,7 +195,7 @@ def wait_until_model_task_uuid_complete_runstate(log_dir, timeout=20, sleep_for=
 
 def read_json(file):
     with open(file) as fp:
-            return json.load(fp)
+        return json.load(fp)
 
 
 def wait_until_complete_model_tasks_predicate(tasks_pred, log_dir, timeout=20, sleep_for=1):
@@ -217,19 +213,11 @@ def wait_until_complete_model_tasks_predicate(tasks_pred, log_dir, timeout=20, s
     return wait_until(until_pred, timeout, sleep_for)
 
 
-def wait_until_rec_tasks_predicate(tasks_pred, log_dir, timeout=20, sleep_for=1):
-    def until_pred():
-        if not os.path.isfile(get_rec_file(log_dir)):
-            return False
-        tasks, root_uuid = get_tasks_from_rec_file(log_dir)
-        return tasks_pred(tasks, root_uuid)
-
-    return wait_until(until_pred, timeout, sleep_for)
-
-
 def get_tasks_by_name(log_dir, name, expect_single=False):
-    tasks, _ = get_tasks_from_rec_file(log_dir)
-    tasks_with_name = [t for t in tasks.values() if t['name'] == name]
+    tasks_with_name = list(get_full_tasks_by_slim_pred(
+        log_dir,
+        lambda t: t.get('name') == name,
+    ).values())
     if expect_single and tasks_with_name:
         named_task_count = len(tasks_with_name)
         assert named_task_count == 1, "Expecting single task with name '%s', but found %s" % (name, named_task_count)
@@ -279,7 +267,7 @@ class FlameRevokeSuccessTest(FlameFlowTestConfiguration):
         return ["submit", "--chain", 'sleep', '--sleep', '90']
 
     def assert_on_flame_url(self, log_dir, flame_url):
-        sleep_exists = wait_until_task_name_exists_in_rec(log_dir, 'sleep')
+        sleep_exists = wait_until_model_task_name_exists(log_dir, 'sleep')
         assert sleep_exists, "Sleep task doesn't exist in the flame rec file, something is wrong with run."
         sleep_task = get_tasks_by_name(log_dir, 'sleep', expect_single=True)
         assert sleep_task['state'] in INCOMPLETE_STATES, \
@@ -323,7 +311,7 @@ class FlameRevokeRootRestSuccessTest(FlameFlowTestConfiguration):
         return ["submit", "--chain", 'sleep', '--sleep', '90']
 
     def assert_on_flame_url(self, log_dir, flame_url):
-        root_exists = wait_until_task_name_exists_in_rec(log_dir, 'RootTask')
+        root_exists = wait_until_model_task_name_exists(log_dir, 'RootTask')
         assert root_exists, "Root task doesn't exist in the flame rec file, something is wrong with run."
 
         revoke_request = requests.get(urllib.parse.urljoin(flame_url, '/api/revoke'))
@@ -429,7 +417,7 @@ class FlameRedisKillCleanupTest(FlameFlowTestConfiguration):
         return ["submit", "--chain", 'sleep', '--sleep', '30', '--broker_max_retry_attempts', '2']
 
     def assert_on_flame_url(self, log_dir, flame_url):
-        sleep_exists = wait_until_task_name_exists_in_rec(log_dir, 'sleep')
+        sleep_exists = wait_until_model_task_name_exists(log_dir, 'sleep')
         assert sleep_exists, "Sleep task doesn't exist in the flame rec file, something is wrong with run."
 
         redis_pid = int(Path(log_dir, Uid.debug_dirname, 'redis', 'redis.pid').read_text())
@@ -460,7 +448,7 @@ class FlameTerminateOnCompleteTest(FlameFlowTestConfiguration):
                 '--flame_timeout', '1']
 
     def assert_on_flame_url(self, log_dir, flame_url):
-        root_task_exists = wait_until_task_name_exists_in_rec(log_dir, 'RootTask')
+        root_task_exists = wait_until_model_task_name_exists(log_dir, 'RootTask')
         assert root_task_exists, "Root task doesn't exist in the flame rec file, something is wrong with run."
 
         # Make sure the web API is stil up after the timeout, since it should be ignored due to terminate_on_complete.
@@ -521,7 +509,7 @@ class DumpSomeDataOnForceKillTest(FlameFlowTestConfiguration):
         return ["submit", "--chain", 'sleep', '--sleep', '10']
 
     def assert_on_flame_url(self, log_dir, flame_url):
-        sleep_exists = wait_until_task_name_exists_in_rec(log_dir, 'sleep')
+        sleep_exists = wait_until_model_task_name_exists(log_dir, 'sleep')
         assert sleep_exists
         time.sleep(2) # small time for slim file to be created.
         # Expect run still active due to sleep and sync=False
@@ -620,7 +608,7 @@ class FlameLiveMonitorRemoteFile(FlameFlowTestConfiguration):
 
 
 def check_live_file_monitoring(host, log_dir, flame_url):
-    sleep_exists = wait_until_task_name_exists_in_rec(log_dir, 'sleep')
+    sleep_exists = wait_until_model_task_name_exists(log_dir, 'sleep')
     assert sleep_exists, "Sleep task doesn't exist in the flame rec file, something is wrong with run."
 
     with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
