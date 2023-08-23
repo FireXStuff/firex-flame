@@ -318,8 +318,12 @@ class FlameRevokeRootRestSuccessTest(FlameFlowTestConfiguration):
         revoke_request = requests.get(urllib.parse.urljoin(flame_url, '/api/revoke'))
         assert revoke_request.ok, f"Unexpected HTTP response to revoke: {revoke_request}"
 
-        root_task = get_tasks_by_name(log_dir, 'RootTask', expect_single=True)
-        assert root_task['state'] == 'task-revoked', f"Expected root runstate to be revoked, was {root_task['state']}"
+        root_revoked = wait_until_complete_model_tasks_predicate(
+            lambda ts: any(t['name'] == 'RootTask' and t.get('state') == 'task-revoked' for t in ts.values()),
+            log_dir)
+        if not root_revoked:
+            root_task_state = get_tasks_by_name(log_dir, 'RootTask', expect_single=True).get('state')
+            raise AssertionError(f"Root task not revoked after revoke request, run state: {root_task_state}")
 
 
 @app.task(bind=True)
