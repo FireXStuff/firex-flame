@@ -24,7 +24,8 @@ from firexkit.task import flame
 
 
 from firex_flame.flame_helper import get_flame_pid, wait_until_pid_not_exist, wait_until, \
-    kill_flame, kill_and_wait, json_file_fn, wait_until_path_exist, deep_merge, wait_until_web_request_ok
+    kill_flame, kill_and_wait, json_file_fn, wait_until_path_exist, deep_merge, wait_until_web_request_ok, \
+    filter_paths
 from firex_flame.event_aggregator import INCOMPLETE_STATES, COMPLETE_STATES
 from firex_flame.model_dumper import get_tasks_slim_file, get_model_full_tasks_by_names, is_dump_complete, \
     get_run_metadata_file, get_flame_url, find_flame_model_dir, load_task_representation, load_slim_tasks, \
