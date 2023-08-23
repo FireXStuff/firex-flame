@@ -12,6 +12,7 @@ from typing import Optional
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
+from io import TextIOWrapper
 
 from celery.events import EventReceiver
 from gevent import spawn, sleep, spawn_later
@@ -185,6 +186,17 @@ class RunningModelDumper:
         self._consume_queue_greenlet.join() # Wait for queue to drain.
 
 
+def _log_event_received(event, event_count):
+    event_timestamp = event.get('local_received')
+    if event_timestamp:
+        lag = time.time() - event_timestamp
+        lag_msg = ' (lag: %.2f)' % lag
+    else:
+        lag_msg = ''
+    logger.debug(
+        f'Received Celery event number {event_count}'
+        f' with task uuid: {event.get("uuid")}{lag_msg}')
+
 class BrokerEventConsumerThread(threading.Thread):
     """Events threading class
     """
@@ -199,7 +211,13 @@ class BrokerEventConsumerThread(threading.Thread):
     ):
         threading.Thread.__init__(self, daemon=True)
         self.celery_app = celery_app
-        self.recording_file = recording_file
+
+        self.open_recording_file : Optional[TextIOWrapper]
+        if recording_file:
+            self.open_recording_file = open(recording_file, "a")
+        else:
+            self.open_recording_file = None
+
         self.flame_controller = flame_controller
         self.event_aggregator = event_aggregator
         self.max_try_interval = 2**config.max_retry_attempts if config.max_retry_attempts is not None else 32
@@ -245,6 +263,9 @@ class BrokerEventConsumerThread(threading.Thread):
             self._cleanup_tasks()
             self.running_dumper_queue.write_remaining_and_wait_stop()
             self.flame_controller.dump_complete_data_model(self.event_aggregator)
+            if self.open_recording_file:
+                self.open_recording_file.close()
+                self.open_recording_file = None
         except Exception as e:
             logger.error("Failed to cleanup during receiver completion.")
             logger.exception(e)
@@ -270,8 +291,7 @@ class BrokerEventConsumerThread(threading.Thread):
             except (KeyboardInterrupt, SystemExit) as e:
                 self.stopped_externally = True
                 self.shutdown_handler.shutdown(str(e))
-            # pylint: disable=C0321
-            except Exception:
+            except Exception: #noqa
                 if self.event_aggregator.is_root_complete():
                     logger.info("Root task complete; stopping broker receiver (not entire server).")
                     return
@@ -299,32 +319,26 @@ class BrokerEventConsumerThread(threading.Thread):
             self.is_first_receive = False
 
         # Append the event to the recording file if it is specified
-        if self.recording_file:
-            with open(self.recording_file, "a") as rec:
-                event_line = json.dumps(event)
-                rec.write(event_line + "\n")
+        if self.open_recording_file is not None:
+            json.dump(event, self.open_recording_file)
+            self.open_recording_file.write("\n")
 
         if self._event_count % 100 == 0:
-            logger.debug(f'Received Celery event number {self._event_count}'
-                         f' with task uuid: {event.get("uuid")}')
+            _log_event_received(event, self._event_count)
         self._event_count += 1
 
         self._aggregate_and_send([event])
 
-        try:
-            if (
-                self.event_aggregator.is_root_complete()
-                # In case checking all tests is expensive, check root first. Remaining
-                # tasks only need to be checked once root is complete since everything
-                # can't be complete if the root is not complete.
-                and self.event_aggregator.all_tasks_complete()
-                and self.celery_event_receiver
-            ):
-                logger.info("Stopping Celery event receiver because all tasks are complete.")
-                self.celery_event_receiver.should_stop = True
-        except Exception as e:
-            logger.exception(e)
-            raise
+        if (
+            self.event_aggregator.is_root_complete()
+            # In case checking all tests is expensive, check root first. Remaining
+            # tasks only need to be checked once root is complete since everything
+            # can't be complete if the root is not complete.
+            and self.event_aggregator.all_tasks_complete()
+            and self.celery_event_receiver
+        ):
+            logger.info("Stopping Celery event receiver because all tasks are complete.")
+            self.celery_event_receiver.should_stop = True
 
     def _aggregate_and_send(self, events):
         new_data_by_task_uuid = self.event_aggregator.aggregate_events(events)

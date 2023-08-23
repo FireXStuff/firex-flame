@@ -85,7 +85,10 @@ FIELD_CONFIG = {
     'called_as_orig': {
         'copy_celery': True,
     },
-    'first_started': {'slim_field': True, 'aggregate_keep_initial': True},
+    'first_started': {
+        'slim_field': True,
+        'aggregate_keep_initial': True,
+    },
     'url': {
         # TODO: only for backwards compat. Can use log_filepath.
         'transform_celery': lambda e: {'logs_url': e['url']},
