@@ -25,7 +25,7 @@ from firexkit.task import flame
 
 from firex_flame.flame_helper import get_flame_pid, wait_until_pid_not_exist, wait_until, \
     kill_flame, kill_and_wait, json_file_fn, wait_until_path_exist, deep_merge, wait_until_web_request_ok, \
-    filter_paths
+    filter_paths, REVOKE_REASON_KEY
 from firex_flame.event_aggregator import INCOMPLETE_STATES, COMPLETE_STATES
 from firex_flame.model_dumper import get_tasks_slim_file, get_model_full_tasks_by_names, is_dump_complete, \
     get_run_metadata_file, get_flame_url, find_flame_model_dir, load_task_representation, load_slim_tasks, \
@@ -461,9 +461,10 @@ class FlameTerminateOnCompleteTest(FlameFlowTestConfiguration):
         assert_flame_web_ok(flame_url, '/alive')
 
         root_task = get_tasks_by_name(log_dir, 'RootTask', expect_single=True)
-        revoke_path = f'/api/revoke/{root_task["uuid"]}?revoke_reason=this+is+the+revoke+reason"'
+        revoke_reason = 'this is the revoke reason'
+        query = urllib.parse.urlencode({REVOKE_REASON_KEY: revoke_reason})
         try:
-            assert_flame_web_ok(flame_url, revoke_path)
+            assert_flame_web_ok(flame_url, f'/api/revoke/{root_task["uuid"]}?{query}')
         except (AssertionError, requests.exceptions.RequestException):
             # FIXME: Note the server can shut down so fast the HTTP response isn't produced.
             pass
@@ -472,6 +473,8 @@ class FlameTerminateOnCompleteTest(FlameFlowTestConfiguration):
         # the broker processor to shutdown flame gracefully.
         flame_killed = wait_until_pid_not_exist(get_flame_pid(log_dir), timeout=30)
         assert flame_killed, 'Flame not terminated after root revoked, even though terminate_on_complete was supplied.'
+        actual_revoke_reason = get_run_metadata(log_dir).get(REVOKE_REASON_KEY)
+        assert actual_revoke_reason == revoke_reason, f'Expected {revoke_reason}, found {actual_revoke_reason}'
 
 
 # noinspection PyUnusedLocal
@@ -652,7 +655,7 @@ def check_live_file_monitoring(host, log_dir, flame_url):
                                  % (update_listen_content, container['content'])
 
             sio_client.emit('stop-listen-file')
-
+            time.sleep(1)
             after_stop_listen_content = 'some more content\n'
             f.write(after_stop_listen_content)
             f.flush()

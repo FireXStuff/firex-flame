@@ -1,5 +1,6 @@
 import logging
-from typing import Any
+from typing import Any, Optional
+import socketio
 
 from firex_flame.event_aggregator import slim_tasks_by_uuid
 from firex_flame.model_dumper import FlameModelDumper
@@ -23,13 +24,13 @@ def _send_listening_query_sio_event(sio_server, new_data_by_task_uuid, all_tasks
 
 class FlameAppController:
 
-    def __init__(self, run_metadata, extra_task_representations):
+    def __init__(self, run_metadata: dict[str, Any], extra_task_representations):
         self.run_metadata = run_metadata
         self.model_dumper = FlameModelDumper(firex_logs_dir=self.run_metadata['logs_dir'])
         self.extra_task_representations = extra_task_representations
         self.listening_query_config_hashes_to_sids = {}
 
-        self.sio_server = None  # Set after creation.
+        self.sio_server : Optional[socketio.Server] = None  # Set after creation.
 
     def send_sio_event(self, new_data_by_task_uuid, tasks_by_uuid):
         slim_update_data_by_uuid = {uuid: task
@@ -46,7 +47,8 @@ class FlameAppController:
                                             self.listening_query_config_hashes_to_sids)
         return slim_update_data_by_uuid
 
-    def dump_initial_metadata(self):
+    def dump_updated_metadata(self, update: dict[str, Any]) -> None:
+        self.run_metadata.update(update)
         self.model_dumper.dump_metadata(self.run_metadata, root_complete=False, flame_complete=False)
 
     def dump_complete_data_model(self, event_aggregator):

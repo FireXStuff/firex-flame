@@ -16,6 +16,8 @@ from flask import Flask, redirect, send_from_directory, Response, render_templat
 from firex_flame.api import create_socketio_task_api, create_revoke_api, create_rest_task_api
 from firexapp.submit.reporting import REL_COMPLETION_REPORT_PATH
 from firex_flame.flame_helper import get_flame_url, FlameServerConfig
+from firex_flame.controller import FlameAppController
+
 
 logger = logging.getLogger(__name__)
 
@@ -166,29 +168,39 @@ def create_web_app(run_metadata, serve_logs_dir):
     return web_app
 
 
-def start_web_server(server_config: FlameServerConfig, event_aggregator, run_metadata, controller, celery_app):
+def start_web_server(
+    server_config: FlameServerConfig,
+    event_aggregator,
+    run_metadata,
+    controller: FlameAppController,
+    celery_app,
+) -> pywsgi.WSGIServer:
     web_app = create_web_app(run_metadata, server_config.serve_logs_dir)
     # TODO: parametrize cors_allowed_origins.
-    sio_server = socketio.Server(cors_allowed_origins='*', async_mode='gevent')
-    sio_web_app = socketio.WSGIApp(sio_server, web_app)
-    controller.sio_server = sio_server
+    controller.sio_server = socketio.Server(cors_allowed_origins='*', async_mode='gevent')
+    sio_web_app = socketio.WSGIApp(controller.sio_server, web_app)
 
     create_socketio_task_api(controller, event_aggregator, run_metadata)
     create_rest_task_api(web_app, event_aggregator, run_metadata)
 
-    server = pywsgi.WSGIServer(('', server_config.webapp_port), sio_web_app, handler_class=WebSocketHandler)
+    server = pywsgi.WSGIServer(
+        ('', server_config.webapp_port),
+        sio_web_app,
+        handler_class=WebSocketHandler,
+        spawn=30,
+    )
     server.start()  # Need to start() to get port if supplied 0.
 
     if celery_app:
         # Celery app means this is initial launch, not a replay from a rec file.
-        run_metadata['flame_url'] = get_flame_url(server.server_port)
         # Can only dump initial metadata now that flame_url is set.
-        controller.dump_initial_metadata()
+        controller.dump_updated_metadata(
+            {'flame_url': get_flame_url(server.server_port)},
+        )
         create_revoke_api(
-            sio_server,
+            controller,
             web_app,
             celery_app,
-            event_aggregator.tasks_by_uuid,
             server_config.authed_user_request_path,
             event_aggregator,
         )

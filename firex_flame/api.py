@@ -10,9 +10,11 @@ from socket import gethostname
 import os
 import subprocess
 import paramiko
+import time
 
-from firex_flame.flame_helper import wait_until, query_full_tasks
-from firex_flame.event_aggregator import slim_tasks_by_uuid, INCOMPLETE_STATES
+from firex_flame.flame_helper import wait_until, query_full_tasks, REVOKE_REASON_KEY, REVOKE_TIMESTAMP_KEY
+from firex_flame.event_aggregator import slim_tasks_by_uuid, INCOMPLETE_STATES, FlameEventAggregator
+from firex_flame.controller import FlameAppController
 
 
 logger = logging.getLogger(__name__)
@@ -298,25 +300,25 @@ def _uuid_and_reason_from_revoke_data(revoke_data):
             revoke_reason = None
     elif isinstance(revoke_data, dict):
         uuid = revoke_data.get('uuid')
-        revoke_reason = revoke_data.get('revoke_reason')
+        revoke_reason = revoke_data.get(REVOKE_REASON_KEY)
     else:
         uuid = None
         revoke_reason = None
     return uuid, revoke_reason
 
 def create_revoke_api(
-    sio_server,
+    controller: FlameAppController,
     web_app,
     celery_app,
-    tasks,
     authed_user_request_path,
-    event_aggregator,
+    event_aggregator: FlameEventAggregator,
 ):
+    assert controller.sio_server is not None
 
     sids_to_details = {}
     NO_USER = 'nouser'
 
-    @sio_server.event
+    @controller.sio_server.event
     def connect(sid, environ):
         requester = _data_from_environ_path(
             environ, authed_user_request_path, NO_USER)
@@ -324,11 +326,11 @@ def create_revoke_api(
             'requester': requester,
         }
 
-    @sio_server.event
+    @controller.sio_server.event
     def disconnect(sid):
         sids_to_details.pop(sid, None)
 
-    @sio_server.on('revoke-task')
+    @controller.sio_server.on('revoke-task')
     def socketio_revoke_task(sid, revoke_data):
         uuid, revoke_reason = _uuid_and_reason_from_revoke_data(revoke_data)
         if uuid:
@@ -337,11 +339,11 @@ def create_revoke_api(
             response_event = 'revoke-success' if revoked else 'revoke-failed'
         else:
             response_event = 'revoke-failed'
-        sio_server.emit(response_event, room=sid)
+        controller.sio_server.emit(response_event, room=sid)
 
     def _rest_revoke_task(uuid):
         authed_user = _data_from_request_path(authed_user_request_path)
-        revoke_reason = request.args.get('revoke_reason')
+        revoke_reason = request.args.get(REVOKE_REASON_KEY)
         claimed_user = request.args.get('revoking_user')
 
         user = authed_user or claimed_user or NO_USER
@@ -367,11 +369,22 @@ def create_revoke_api(
         if revoke_reason:
             msg += f' with reason: {revoke_reason}'
         logger.info(msg)
-        if uuid not in tasks:
+        if uuid not in event_aggregator.tasks_by_uuid:
             return False
 
-        task = tasks[uuid]
+        prev_revoked_data = None
+        task = event_aggregator.tasks_by_uuid[uuid]
         if task['state'] in INCOMPLETE_STATES:
+            run_revoked = event_aggregator.root_uuid == uuid
+            if run_revoked:
+                prev_revoked_data = {
+                    k: v for k, v in controller.run_metadata.items()
+                    if k in [REVOKE_REASON_KEY, REVOKE_TIMESTAMP_KEY]
+                }
+                controller.dump_updated_metadata({
+                    REVOKE_REASON_KEY: revoke_reason,
+                    REVOKE_TIMESTAMP_KEY: time.time(),
+                })
             celery_app.control.revoke(uuid, terminate=True)
             logger.info(f"Submitted revoke to celery for: {uuid}")
         else:
@@ -384,9 +397,12 @@ def create_revoke_api(
         task_runstate = task['state']
         revoked = task_runstate == 'task-revoked'
         if not revoked:
-            logger.warning("Failed to revoke task: waited %s sec and runstate is currently %s"
-                           % (revoke_timeout, task_runstate))
+            logger.warning(
+                f"Failed to revoke task: waited {revoke_timeout} sec and runstate is currently {task_runstate}")
+            if prev_revoked_data:
+                # restore the previous revoke data since the revoke has appeared to fail.
+                controller.dump_updated_metadata(prev_revoked_data)
         else:
-            logger.debug("Successfully revoked task %s." % uuid)
+            logger.debug(f"Successfully revoked task {uuid}.")
 
         return revoked  # If the task was successfully revoked, return true

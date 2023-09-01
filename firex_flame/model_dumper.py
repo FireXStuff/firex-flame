@@ -166,7 +166,7 @@ class FlameModelDumper:
     def dump_metadata(self, run_metadata, root_complete, flame_complete):
         metadata_model_file = get_run_metadata_file(root_model_dir=self.root_model_dir)
         complete = {'run_complete': root_complete, 'flame_recv_complete': flame_complete}
-        _truncating_write_json(metadata_model_file, {**run_metadata, **complete})
+        _truncating_write_json(metadata_model_file, run_metadata | complete)
         return metadata_model_file
 
     def dump_aggregator_complete_data_model(self, event_aggregator, run_metadata=None, extra_task_representations=tuple(),

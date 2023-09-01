@@ -15,6 +15,13 @@ from firexapp.submit.uid import Uid
 logger = logging.getLogger(__name__)
 
 DEFAULT_FLAME_TIMEOUT = 60 * 60 * 24 * 2
+REVOKE_REASON_KEY = 'revoke_reason'
+
+# This is when Flame sends the revoke to Celery,
+# which can differ from when the task is actually sent
+# the revoked signal, which is different from when
+# the task completes due to the revoke.
+REVOKE_TIMESTAMP_KEY = 'revoke_timestamp'
 
 # This structure contains an index by UUID for both ancestors and descendants. This is memory inefficient,
 # but makes queries that would involve multiple graph traversals very fast.
@@ -98,7 +105,7 @@ def find_rec_file(log_dir):
     return get_rec_file(log_dir)
 
 
-def get_flame_url(port, hostname=None):
+def get_flame_url(port: int, hostname=None) -> str:
     if hostname is None:
         from socket import gethostname
         hostname = gethostname()
