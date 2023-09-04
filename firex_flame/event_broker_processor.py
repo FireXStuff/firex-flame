@@ -21,6 +21,7 @@ from gevent.queue import JoinableQueue
 from firex_flame.controller import FlameAppController
 from firex_flame.flame_helper import BrokerConsumerConfig
 from firex_flame.event_aggregator import FlameEventAggregator
+from firexapp.submit.submit import ASYNC_SHUTDOWN_CELERY_EVENT_TYPE
 
 logger = logging.getLogger(__name__)
 
@@ -215,7 +216,7 @@ class BrokerEventConsumerThread(threading.Thread):
 
         self.open_recording_file : Optional[TextIOWrapper]
         if recording_file:
-            self.open_recording_file = open(recording_file, "a")
+            self.open_recording_file = open(recording_file, "a", encoding="utf-8")
         else:
             self.open_recording_file = None
 
@@ -247,7 +248,7 @@ class BrokerEventConsumerThread(threading.Thread):
         # Create new events that change the run state of incomplete events.
         incomplete_task_events = self.event_aggregator.generate_incomplete_events()
         if incomplete_task_events:
-            logger.warning("Forcing runstates of %d incomplete tasks to be terminal." % len(incomplete_task_events))
+            logger.warning(f"Forcing runstates of {len(incomplete_task_events)} incomplete tasks to be terminal.")
             self._aggregate_and_send(incomplete_task_events)
         else:
             logger.debug("All tasks already terminal following terminal root.")
@@ -267,9 +268,9 @@ class BrokerEventConsumerThread(threading.Thread):
             if self.open_recording_file:
                 self.open_recording_file.close()
                 self.open_recording_file = None
-        except Exception as e:
+        except Exception as ex:
             logger.error("Failed to cleanup during receiver completion.")
-            logger.exception(e)
+            logger.exception(ex)
         finally:
             logger.info("Completed receiver cleanup.")
             if self.terminate_on_complete and not self.stopped_externally:
@@ -343,7 +344,17 @@ class BrokerEventConsumerThread(threading.Thread):
             logger.info("Stopping Celery event receiver because all tasks are complete.")
             self.celery_event_receiver.should_stop = True
 
+    def _maybe_update_run_revoked(self, events: list[dict[str, Any]]) -> None:
+        shutdown_events = [
+            e for e in events if e.get('type') == ASYNC_SHUTDOWN_CELERY_EVENT_TYPE
+        ]
+        if shutdown_events:
+            self.flame_controller.update_revoke_reason(
+                shutdown_events[-1].get('shutdown_reason'),
+            )
+
     def _aggregate_and_send(self, events):
+        self._maybe_update_run_revoked(events)
         new_data_by_task_uuid = self.event_aggregator.aggregate_events(events)
         slim_update_data_by_uuid = self.flame_controller.send_sio_event(new_data_by_task_uuid,
                                                                         self.event_aggregator.tasks_by_uuid)

@@ -1,10 +1,11 @@
 import logging
 from typing import Any, Optional
 import socketio
+import time
 
 from firex_flame.event_aggregator import slim_tasks_by_uuid
 from firex_flame.model_dumper import FlameModelDumper
-from firex_flame.flame_helper import query_partial_tasks, get_dict_json_md5
+from firex_flame.flame_helper import query_partial_tasks, get_dict_json_md5, REVOKE_REASON_KEY, REVOKE_TIMESTAMP_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,22 @@ class FlameAppController:
             _send_listening_query_sio_event(self.sio_server, new_data_by_task_uuid, tasks_by_uuid,
                                             self.listening_query_config_hashes_to_sids)
         return slim_update_data_by_uuid
+
+    def get_revoke_data(self):
+        return {
+            k: v for k, v in self.run_metadata.items()
+            if k in [REVOKE_REASON_KEY, REVOKE_TIMESTAMP_KEY]
+        }
+
+    def update_revoke_reason(self, revoke_reason, revoke_timestap=None):
+        if revoke_timestap is None:
+            revoke_timestap = time.time()
+        self.dump_updated_metadata(
+            {
+                REVOKE_REASON_KEY: revoke_reason,
+                REVOKE_TIMESTAMP_KEY: revoke_timestap,
+            }
+        )
 
     def dump_updated_metadata(self, update: dict[str, Any]) -> None:
         self.run_metadata.update(update)

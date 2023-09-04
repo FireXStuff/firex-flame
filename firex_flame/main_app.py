@@ -52,5 +52,5 @@ def start_flame(server_config: FlameServerConfig, broker_consumer_config, run_me
 
     # Delaying of importing of all web dependencies is a deliberate startup performance optimization.
     # The broker should be listening for events as quickly as possible.
-    from firex_flame.web_app import start_web_server
+    from firex_flame.web_app import start_web_server #noqa
     return start_web_server(server_config, event_aggregator, run_metadata, controller, celery_app)

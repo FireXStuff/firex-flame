@@ -368,6 +368,7 @@ def create_revoke_api(
         msg = f"Received {type} request to revoke {uuid} from user {user}"
         if revoke_reason:
             msg += f' with reason: {revoke_reason}'
+            revoke_reason = revoke_reason[:200] # trim since we'll store this.
         logger.info(msg)
         if uuid not in event_aggregator.tasks_by_uuid:
             return False
@@ -377,14 +378,8 @@ def create_revoke_api(
         if task['state'] in INCOMPLETE_STATES:
             run_revoked = event_aggregator.root_uuid == uuid
             if run_revoked:
-                prev_revoked_data = {
-                    k: v for k, v in controller.run_metadata.items()
-                    if k in [REVOKE_REASON_KEY, REVOKE_TIMESTAMP_KEY]
-                }
-                controller.dump_updated_metadata({
-                    REVOKE_REASON_KEY: revoke_reason,
-                    REVOKE_TIMESTAMP_KEY: time.time(),
-                })
+                prev_revoked_data = controller.get_revoke_data()
+                controller.update_revoke_reason(revoke_reason)
             celery_app.control.revoke(uuid, terminate=True)
             logger.info(f"Submitted revoke to celery for: {uuid}")
         else:
