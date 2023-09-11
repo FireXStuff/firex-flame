@@ -3,6 +3,7 @@ import logging
 import os
 from pathlib import Path
 import tarfile
+import tempfile
 
 from gevent.fileobject import FileObject
 
@@ -12,9 +13,20 @@ from firex_flame.flame_helper import get_flame_debug_dir, query_full_tasks
 logger = logging.getLogger(__name__)
 
 
-def _truncating_write_json(file, data):
-    with open(file, 'w') as f:
-        json.dump(data, fp=FileObject(file, 'w'), sort_keys=True, indent=2)
+def _atomic_write_json(filename, data):
+    filename = os.path.realpath(filename)
+    filedir = os.path.dirname(filename)
+    with tempfile.NamedTemporaryFile(mode='w',
+                                     dir=filedir,
+                                     delete=False) as f:
+        json.dump(
+            data,
+            fp=FileObject(f, 'w'), # closes fd
+            sort_keys=True,
+            indent=2)
+
+        os.chmod(f.name, 0o664)
+        os.replace(f.name, filename)
 
 
 def get_flame_model_dir(firex_logs_dir):
@@ -166,7 +178,7 @@ class FlameModelDumper:
     def dump_metadata(self, run_metadata, root_complete, flame_complete):
         metadata_model_file = get_run_metadata_file(root_model_dir=self.root_model_dir)
         complete = {'run_complete': root_complete, 'flame_recv_complete': flame_complete}
-        _truncating_write_json(metadata_model_file, run_metadata | complete)
+        _atomic_write_json(metadata_model_file, run_metadata | complete)
         return metadata_model_file
 
     def dump_aggregator_complete_data_model(self, event_aggregator, run_metadata=None, extra_task_representations=tuple(),
@@ -178,10 +190,10 @@ class FlameModelDumper:
         Path(get_model_complete_file(root_model_dir=self.root_model_dir)).touch()
 
     def dump_full_task(self, uuid, task):
-        _truncating_write_json(os.path.join(self.full_tasks_dir, '%s.json' % uuid), task)
+        _atomic_write_json(os.path.join(self.full_tasks_dir, f'{uuid}.json'), task)
 
     def dump_slim_tasks(self, all_tasks_by_uuid):
-        _truncating_write_json(self.slim_tasks_file, slim_tasks_by_uuid(all_tasks_by_uuid))
+        _atomic_write_json(self.slim_tasks_file, slim_tasks_by_uuid(all_tasks_by_uuid))
 
     def dump_complete_data_model(self, tasks_by_uuid, root_uuid=None, run_metadata=None, dump_task_jsons=True):
         logger.info("Starting to dump complete Flame model.")
@@ -223,16 +235,16 @@ class FlameModelDumper:
         logger.info(f"Starting to dump task representation of: {representation_file}.")
 
         try:
-            with open(representation_file) as fp:
+            with open(representation_file, encoding='utf-8') as fp:
                 representation_data = json.load(fp)
 
             file_basename = representation_data['model_file_name']
             out_file = os.path.join(self.root_model_dir, file_basename)
             queried_tasks = query_full_tasks(tasks_by_uuid, representation_data['task_queries'])
-            _truncating_write_json(out_file, queried_tasks)
-        except Exception as e:
+            _atomic_write_json(out_file, queried_tasks)
+        except Exception as ex:
             # Don't interfere with shutdown even if extra representation dumping fails.
             logger.error(f"Failed to dump representation of {representation_file}.")
-            logger.exception(e)
+            logger.exception(ex)
         else:
             logger.info(f"Finished dumping task representation of: {representation_file}.")

@@ -4,7 +4,8 @@ import unittest
 from firex_flame.event_aggregator import FlameEventAggregator
 from firex_flame.event_file_processor import process_recording_file, get_model_or_rec_full_task
 
-test_data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+parent = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+test_data_dir = os.path.join(parent, "data")
 
 
 class EventFileProcessorTests(unittest.TestCase):
