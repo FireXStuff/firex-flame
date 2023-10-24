@@ -16,7 +16,26 @@ logger = logging.getLogger(__name__)
 TASK_ARGS = 'firex_bound_args'
 
 
-#
+def _event_type_handler(event: dict[str, Any]) -> dict[str, Any]:
+    event_type = event.get('type')
+    if event_type in STATE_TYPES:
+        state = event_type_to_task_state(event_type)
+        transformed_data = {
+            'state': state,
+            'states': [{'state': state,
+                        'timestamp': event.get('local_received')}],
+        }
+        if state == REVOKED_EVENT_TYPE:
+            # tasks can become not-revoked after being revoked, so we need to keep track of revoked state
+            # explicitly. Consider doing all revoked state based on FIREX_REVOKE_COMPLETE_EVENT_TYPE,
+            # but there can be a big delay between REVOKED_EVENT_TYPE and FIREX_REVOKE_COMPLETE_EVENT_TYPE
+            # due to cleanup done by the root task.
+            transformed_data['was_revoked'] = True
+
+        return transformed_data
+    else:
+        return {}
+
 # config field options:
 #   copy_celery - True if this field should be copied from the celery event to the task data model. If the field already
 #                   has a value on the data model, more recent celery field values will overwrite existing values by
@@ -45,11 +64,7 @@ FIELD_CONFIG = {
     'parent_id': {'copy_celery': True, 'slim_field': True},
     'type': {
         'copy_celery': True,
-        'transform_celery': lambda e: {
-            'state': event_type_to_task_state(e['type']),
-            'states': [{'state': event_type_to_task_state(e['type']),
-                        'timestamp': e.get('local_received', None)}],
-        } if e['type'] in STATE_TYPES else {},
+        'transform_celery': _event_type_handler,
     },
     'retries': {'copy_celery': True, 'slim_field': True},
     TASK_ARGS: {'copy_celery': True},
@@ -129,7 +144,10 @@ FIELD_CONFIG = {
     },
     'pid': {
         'copy_celery': True,
-    }
+    },
+    'was_revoked': {
+        'copy_celery': True,
+    },
 }
 
 
@@ -257,6 +275,7 @@ class FlameEventAggregator:
             task = {
                 'uuid': task_uuid,
                 'task_num': self.new_task_num,
+                'was_revoked': False,
             }
             self.new_task_num += 1
             self.tasks_by_uuid[task_uuid] = task

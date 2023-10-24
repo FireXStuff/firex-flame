@@ -361,9 +361,6 @@ def create_revoke_api(
         logger.debug(f'Revoking entire run via root task UUID: {event_aggregator.root_uuid}')
         return _rest_revoke_task(event_aggregator.root_uuid)
 
-    def _wait_until_task_complete(task, timeout, sleep_for=1):
-        wait_until(lambda t: t['state'] not in INCOMPLETE_STATES, timeout, sleep_for, task)
-
     def _revoke_task(uuid, type, user, revoke_reason):
         msg = f"Received {type} request to revoke {uuid} from user {user}"
         if revoke_reason:
@@ -387,13 +384,11 @@ def create_revoke_api(
 
         # Wait for the task to become revoked
         revoke_timeout = 10
-        _wait_until_task_complete(task, timeout=revoke_timeout)
 
-        task_runstate = task['state']
-        revoked = task_runstate == 'task-revoked'
+        revoked = wait_until(lambda: task.get('was_revoked'), timeout=revoke_timeout, sleep_for=1)
         if not revoked:
             logger.warning(
-                f"Failed to revoke task: waited {revoke_timeout} sec and runstate is currently {task_runstate}")
+                f"Failed to revoke task: waited {revoke_timeout} sec and runstate is currently {task['state']}")
             if prev_revoked_data:
                 # restore the previous revoke data since the revoke has appeared to fail.
                 controller.dump_updated_metadata(prev_revoked_data)
