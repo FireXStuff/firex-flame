@@ -174,19 +174,29 @@ class TaskQueryTests(unittest.TestCase):
             '6': {'field': 3, 'parent_id': '5', 'uuid': '6'},
             # not in results b/c field != 3
             '7': {'field': 2, 'parent_id': '3', 'uuid': '7'},
+
+            # test multiple levels of ADDITIONAL_CHILDREN_KEY traversal
+            '8': {
+                'field': 3, 'parent_id': '5', 'uuid': '8',
+                ADDITIONAL_CHILDREN_KEY: ['9'],
+            },
+            '9': {'field': 3, 'parent_id': '8', 'uuid': '9'},
         }
 
         partial_query_result = query_partial_tasks(['3'], queries, all_tasks)
         expected = {
-            '3': {'uuid': '3',
-            'descendants': {
-                # Find 3's parent, since it's an additional_child.
-                '2': {'uuid': '2'},
-                # Find 3 itself, since it's an additional_child.
-                '3': {'uuid': '3'},
-                '5': {'uuid': '5'},
-                '6': {'uuid': '6'},
-            }},
+            '3': {
+                'uuid': '3',
+                'descendants': {
+                    # Find 3's parent, since it's an additional_child.
+                    '2': {'uuid': '2'},
+                    # Find 3 itself, since it's an additional_child.
+                    '3': {'uuid': '3'},
+                    '5': {'uuid': '5'},
+                    '6': {'uuid': '6'},
+                    '8': {'uuid': '8'},
+                    '9': {'uuid': '9'},
+                }},
         }
         self.assertEqual(partial_query_result, expected)
 
