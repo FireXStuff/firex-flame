@@ -51,7 +51,8 @@ class FlameTaskGraph:
             uuid = to_check_uuids.pop()
             checked_uuids.add(uuid)
             for descendant_uuid in uuids_by_uuid.get(uuid, []):
-                result_tasks_by_uuid[descendant_uuid] = self.tasks_by_uuid[descendant_uuid]
+                if descendant_uuid in self.tasks_by_uuid:
+                    result_tasks_by_uuid[descendant_uuid] = self.tasks_by_uuid[descendant_uuid]
                 if descendant_uuid not in checked_uuids:
                     to_check_uuids.append(descendant_uuid)
         return result_tasks_by_uuid.values()
