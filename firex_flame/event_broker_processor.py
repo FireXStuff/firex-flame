@@ -285,7 +285,7 @@ class BrokerEventConsumerThread(threading.Thread):
                     conn.ensure_connection(max_retries=1, interval_start=0)
                     self.celery_event_receiver = EventReceiver(
                         conn,
-                        handlers={"*": self._on_celery_event},
+                        handlers={"*": self._safe_on_celery_event},
                         app=self.celery_app)
                     try_interval = 1
 
@@ -308,6 +308,12 @@ class BrokerEventConsumerThread(threading.Thread):
                     return
                 logger.debug(f"Try interval {try_interval} secs, still worth retrying.")
                 time.sleep(try_interval)
+
+    def _safe_on_celery_event(self, event):
+        try:
+            self._on_celery_event(event)
+        except Exception:
+            logger.exception(f'Failed to process Celery event: {event}')
 
     def _on_celery_event(self, event):
         """Callback function for when an event is received
