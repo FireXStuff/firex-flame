@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 from io import TextIOWrapper
+from datetime import datetime, timezone, timedelta
 
 from celery.events import EventReceiver
 from gevent import spawn, sleep, spawn_later
@@ -53,15 +54,13 @@ class RunningModelDumper:
     def __init__(
         self,
         flame_controller: FlameAppController,
-        all_tasks_by_uuid: dict[str, dict[str, Any]],
         max_extra_task_repr_dump_delay: int = 5*60,
     ):
-        self.flame_controller = flame_controller
+        self.flame_controller : FlameAppController = flame_controller
 
         # This is a JoinableQueue just to make testing easier. Clients will wait on the greenlet that processes
         # queue items, not the queue itself.
         self._queue : JoinableQueue[_QueueItem] = JoinableQueue()
-        self.all_tasks_by_uuid = all_tasks_by_uuid
 
         # This class uses the 'task-completed' event type to loosely infer task completeness, since there is no
         # stronger indicator (e.g. task-failed does not mean completed, due to retries). This field stores task UUIDs
@@ -91,13 +90,13 @@ class RunningModelDumper:
         spawn_later(delay_sec, self._dump_extra_task_representation, delay_sec, max_delay)
 
     def _dump_extra_task_representation(self, delay_sec: int, max_delay: int):
-        self.flame_controller.dump_extra_task_representations(self.all_tasks_by_uuid)
+        self.flame_controller.dump_extra_task_representations()
         # Schedule the next dump
         self._schedule_dump_extra_task_representation(delay_sec, max_delay)
 
     def _maybe_dump_task(self, uuid: str, event_type: str):
-        if uuid in self.all_tasks_by_uuid:
-            task = self.all_tasks_by_uuid[uuid]
+        task = self.flame_controller.get_task(uuid)
+        if task:
             if (
                 event_type in self.WRITE_EVENT_TYPES
                 or uuid in self.seen_task_completed_uuids
@@ -137,14 +136,15 @@ class RunningModelDumper:
         return [item] + [self._queue.get() for _ in range(len(self._queue))]
 
     def _consume_from_queue(self) -> None:
-        while True:
+        consuming = True
+        while consuming:
             # drain queue and process all work items at once, de-duplicating work.
             work_items : list[_QueueItem] = self._get_all_from_queue()
             work_item_types : list[QueueItemType] = {t.item_type for t in work_items}
 
             try:
                 if QueueItemType.SLIM_DUMP_TYPE in work_item_types:
-                    self.flame_controller.dump_slim_tasks(self.all_tasks_by_uuid)
+                    self.flame_controller.dump_slim_tasks()
 
                 if QueueItemType.TASK_DUMP_TYPE in work_item_types:
                     self._deduplicate_and_maybe_write_full_tasks(
@@ -152,10 +152,10 @@ class RunningModelDumper:
                     )
 
                 if QueueItemType.STOP_DUMP_TYPE in work_item_types:
-                    all_uuids = set(self.all_tasks_by_uuid.keys())
+                    all_uuids = self.flame_controller.get_all_task_uuids()
                     uuids_without_completed = all_uuids.difference(self.seen_task_completed_uuids)
                     for uuid in uuids_without_completed:
-                        self._dump_full_task(uuid, self.all_tasks_by_uuid[uuid])
+                        self._dump_full_task(uuid, self.flame_controller.get_task(uuid))
 
             except Exception as e:
                 # TODO: narrow exception handling so that an error in handling of one dump_type doesn't fail others.
@@ -168,11 +168,11 @@ class RunningModelDumper:
                 # Must be last, want to process all other work items before we stop processing all future
                 # work items.
                 if QueueItemType.STOP_DUMP_TYPE in work_item_types:
-                    logger.debug(f"Stopping in progress model dumper.")
-                    break
-
-                # Let other greenlets run, possibly let work accumulate in the queue to allow work de-duplication
-                sleep(0.2)
+                    logger.debug("Stopping in progress model dumper.")
+                    consuming = False
+                else:
+                    # Let other greenlets run, possibly let work accumulate in the queue to allow work de-duplication
+                    sleep(0.2)
 
     def queue_write_slim(self) -> None:
         self._queue.put(_QueueItem(QueueItemType.SLIM_DUMP_TYPE))
@@ -187,21 +187,40 @@ class RunningModelDumper:
         self._consume_queue_greenlet.join() # Wait for queue to drain.
 
 
+def _get_event_lag(event_timestamp, celery_utcoffset):
+    # celery_utcoffset is garbage. It's the UTC offset, but
+    # event_timestamp is not in this timezone. It looks like Celery
+    # assumes the mc is in UTC, so the real offset is mc_offset_hr + celery_utcoffset
+    try:
+        now_dt = datetime.now(timezone.utc)
+        mc_offset_hr = now_dt.astimezone().utcoffset().total_seconds() / 3600
+        real_tz_offset_hr = mc_offset_hr + celery_utcoffset
+        event_datetime = datetime.fromtimestamp(
+            event_timestamp,
+            timezone(timedelta(hours=real_tz_offset_hr))
+        )
+        return (now_dt - event_datetime.replace(tzinfo=timezone.utc)).total_seconds()
+    except Exception:
+        return None
+
+
 def _log_event_received(event, event_count):
+    lag_msg = ''
     event_timestamp = event.get('timestamp')
+
     if event_timestamp:
-        lag = time.time() - event_timestamp
-        lag_msg = ' (lag: %.2f)' % lag
-    else:
-        lag_msg = ''
+        lag = _get_event_lag(event_timestamp, event.get('utcoffset', 0))
+        if lag is not None:
+            lag_msg = f' (lag: {lag:.2f})'
+
     logger.debug(
         f'Received Celery event number {event_count}'
         f' with task uuid: {event.get("uuid")}{lag_msg}')
 
 
 class BrokerEventConsumerThread(threading.Thread):
-    """Events threading class
-    """
+    """Events threading class"""
+
     def __init__(
         self,
         celery_app,
@@ -238,7 +257,7 @@ class BrokerEventConsumerThread(threading.Thread):
         else:
             self.receiver_ready_file = None
         self.is_first_receive = True
-        self.running_dumper_queue = RunningModelDumper(self.flame_controller, self.event_aggregator.tasks_by_uuid)
+        self.running_dumper_queue = RunningModelDumper(self.flame_controller)
 
     def _create_receiver_ready_file(self):
         if self.receiver_ready_file:
@@ -264,7 +283,7 @@ class BrokerEventConsumerThread(threading.Thread):
         try:
             self._cleanup_tasks()
             self.running_dumper_queue.write_remaining_and_wait_stop()
-            self.flame_controller.dump_complete_data_model(self.event_aggregator)
+            self.flame_controller.dump_complete_data_model()
             if self.open_recording_file:
                 self.open_recording_file.close()
                 self.open_recording_file = None
@@ -352,7 +371,8 @@ class BrokerEventConsumerThread(threading.Thread):
 
     def _maybe_update_run_revoked(self, events: list[dict[str, Any]]) -> None:
         shutdown_events = [
-            e for e in events if e.get('type') == ASYNC_SHUTDOWN_CELERY_EVENT_TYPE
+            e for e in events
+            if e.get('type') == ASYNC_SHUTDOWN_CELERY_EVENT_TYPE
         ]
         if shutdown_events:
             self.flame_controller.update_revoke_reason(
@@ -362,11 +382,12 @@ class BrokerEventConsumerThread(threading.Thread):
     def _aggregate_and_send(self, events):
         self._maybe_update_run_revoked(events)
         new_data_by_task_uuid = self.event_aggregator.aggregate_events(events)
-        slim_update_data_by_uuid = self.flame_controller.send_sio_event(new_data_by_task_uuid,
-                                                                        self.event_aggregator.tasks_by_uuid)
+        slim_update_data_by_uuid = self.flame_controller.update_graph_and_sio_clients(new_data_by_task_uuid)
         if slim_update_data_by_uuid:
             self.running_dumper_queue.queue_write_slim()
 
         self.running_dumper_queue.queue_maybe_write_tasks(
-            {u: self.event_aggregator.tasks_by_uuid.get(u, {}).get('type')
-             for u in new_data_by_task_uuid.keys()})
+            {
+                u: self.event_aggregator.tasks_by_uuid.get(u, {}).get('type')
+                for u in new_data_by_task_uuid.keys()
+            })

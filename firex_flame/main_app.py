@@ -33,7 +33,11 @@ def create_broker_consumer_thread(broker_consumer_config, controller, event_aggr
 
 def start_flame(server_config: FlameServerConfig, broker_consumer_config, run_metadata, shutdown_handler, wait_for_webserver):
     event_aggregator = FlameEventAggregator()
-    controller = FlameAppController(run_metadata, server_config.extra_task_dump_paths)
+    controller = FlameAppController(
+        run_metadata,
+        server_config.extra_task_dump_paths,
+        event_aggregator.tasks_by_uuid, # FIXME: note this instance is relevant, not just the data
+    )
     recording_file = server_config.recording_file
     if not recording_file or not os.path.isfile(recording_file):
         event_recv_thread = create_broker_consumer_thread(broker_consumer_config, controller, event_aggregator,

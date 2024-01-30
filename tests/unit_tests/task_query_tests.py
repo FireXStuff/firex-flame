@@ -1,7 +1,7 @@
 import os
 import unittest
 
-from firex_flame.flame_helper import query_full_tasks, query_partial_tasks
+from firex_flame.flame_helper import FlameTaskGraph
 
 from firexapp.events.model import ADDITIONAL_CHILDREN_KEY
 
@@ -24,7 +24,8 @@ class TaskQueryTests(unittest.TestCase):
             '2': {'field1': 3, 'field2': 4, 'parent_id': '1', 'uuid': '2'},
         }
 
-        result = query_full_tasks(tasks, queries)
+        graph = FlameTaskGraph(tasks)
+        result = graph.query_full_tasks(queries)
 
         self.assertEqual(len(result), 2)
         self.assertEqual(result['1'], {k: v for k, v in tasks['1'].items() if k in selectPaths})
@@ -45,7 +46,7 @@ class TaskQueryTests(unittest.TestCase):
             '2': {'field1': 2, 'parent_id': '1', 'uuid': '2'},
         }
 
-        result = query_full_tasks(tasks, queries)
+        result = FlameTaskGraph(tasks).query_full_tasks(queries)
 
         self.assertEqual(len(result), 1)
         self.assertEqual(result['1'], {'uuid': '1'})
@@ -63,7 +64,7 @@ class TaskQueryTests(unittest.TestCase):
             '2': {'field1': {'2': 2}, 'parent_id': '1', 'uuid': '2'},
         }
 
-        result = query_full_tasks(tasks, queries)
+        result = FlameTaskGraph(tasks).query_full_tasks(queries)
 
         self.assertEqual(len(result), 2)
         self.assertEqual(result['1'], {'field1': {'2': {'3': 1}}, 'uuid': '1'})
@@ -91,7 +92,7 @@ class TaskQueryTests(unittest.TestCase):
             '3': {'field1': 3, 'parent_id': '2', 'uuid': '3'},
         }
 
-        result = query_full_tasks(tasks, queries)
+        result = FlameTaskGraph(tasks).query_full_tasks(queries)
 
         self.assertEqual(len(result), 1)
         self.assertEqual(result['1'], {'parent_id': None, 'uuid': '1', 'descendants': {
@@ -128,7 +129,7 @@ class TaskQueryTests(unittest.TestCase):
             '4': {'field1': 3, 'parent_id': '1', 'uuid': '4'},
         }
 
-        result = query_partial_tasks(['3'], queries, all_tasks)
+        result = FlameTaskGraph(all_tasks).query_partial_tasks(['3'], queries)
 
         self.assertEqual(result, {
             # '2' is included because it selects 3 as a descendant.
@@ -183,7 +184,7 @@ class TaskQueryTests(unittest.TestCase):
             '9': {'field': 3, 'parent_id': '8', 'uuid': '9'},
         }
 
-        partial_query_result = query_partial_tasks(['3'], queries, all_tasks)
+        partial_query_result = FlameTaskGraph(all_tasks).query_partial_tasks(['3'], queries)
         expected = {
             '3': {
                 'uuid': '3',
@@ -200,5 +201,5 @@ class TaskQueryTests(unittest.TestCase):
         }
         self.assertEqual(partial_query_result, expected)
 
-        full_query_result = query_full_tasks(all_tasks, queries)
+        full_query_result = FlameTaskGraph(all_tasks).query_full_tasks(queries)
         self.assertEqual(full_query_result, expected)

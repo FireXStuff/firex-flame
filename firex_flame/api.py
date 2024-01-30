@@ -3,19 +3,17 @@ Flask API module for interacting with celery tasks.
 """
 
 import logging
-
-from flask import jsonify, request
-from gevent import spawn, sleep
 from socket import gethostname
 import os
 import subprocess
-import paramiko
-import time
 
-from firex_flame.flame_helper import wait_until, query_full_tasks, REVOKE_REASON_KEY, REVOKE_TIMESTAMP_KEY
+from flask import jsonify, request
+from gevent import spawn, sleep
+import paramiko
+
+from firex_flame.flame_helper import wait_until, REVOKE_REASON_KEY
 from firex_flame.event_aggregator import slim_tasks_by_uuid, INCOMPLETE_STATES, FlameEventAggregator
 from firex_flame.controller import FlameAppController
-
 
 logger = logging.getLogger(__name__)
 
@@ -59,14 +57,14 @@ def monitor_file(sio_server, sid, host, filename):
     # check if host is localhost or remote - use ssh if remote
     if host in ['127.0.0.1', 'localhost', gethostname()]:
         # Read file locally - output to be sent to requesting client
-        logger.info("Will start monitoring file %s locally" % filename)
+        logger.info(f"Will start monitoring file {filename} locally")
 
         if not os.path.isfile(filename):
-            emit_line_data("File %s does not exist." % filename)
+            emit_line_data(f"File {filename} does not exist.")
             return
 
         if not os.access(filename, os.R_OK):
-            emit_line_data("File %s is not accessible." % filename)
+            emit_line_data(f"File {filename} is not accessible.")
             return
 
         try:
@@ -179,7 +177,7 @@ def monitor_file(sio_server, sid, host, filename):
 
 def term_subproc(sid):
     if sid not in subprocess_dict:
-        logger.warning("SID %s not in subprocess list" % sid)
+        logger.warning(f"SID {sid} not in subprocess list")
         return
 
     subproc = subprocess_dict[sid]
@@ -192,13 +190,17 @@ def term_all_subprocs():
         term_subproc(sid)
 
 
-def create_socketio_task_api(controller, event_aggregator, run_metadata):
+def create_socketio_task_api(
+    controller: FlameAppController,
+    event_aggregator,
+    run_metadata,
+):
 
     @controller.sio_server.on('send-graph-state')
     def emit_frontend_tasks_by_uuid(sid, data=None):
         """ Send 'slim' fields for all tasks. This allows visualization of the graph."""
         if data and 'task_queries' in data:
-            tasks_to_send = query_full_tasks(event_aggregator.tasks_by_uuid, data['task_queries'])
+            tasks_to_send = controller.graph.query_full_tasks(data['task_queries'])
         else:
             tasks_to_send = slim_tasks_by_uuid(event_aggregator.tasks_by_uuid)
         controller.sio_server.emit('graph-state', tasks_to_send, room=sid)
@@ -238,7 +240,7 @@ def create_socketio_task_api(controller, event_aggregator, run_metadata):
         if 'host' not in args or 'filepath' not in args:
             controller.sio_server.emit(
                 'file-line',
-                "File monitoring request is missing either host and/or filepath parameters: %s" % args,
+                f"File monitoring request is missing either host and/or filepath parameters: {args}",
                 room=sid)
         else:
             spawn(monitor_file, sio_server=controller.sio_server, sid=sid, host=args['host'], filename=args['filepath'])
@@ -296,8 +298,8 @@ def _data_from_request_path(path):
 
 def _uuid_and_reason_from_revoke_data(revoke_data):
     if isinstance(revoke_data, str):
-            uuid = revoke_data
-            revoke_reason = None
+        uuid = revoke_data
+        revoke_reason = None
     elif isinstance(revoke_data, dict):
         uuid = revoke_data.get('uuid')
         revoke_reason = revoke_data.get(REVOKE_REASON_KEY)

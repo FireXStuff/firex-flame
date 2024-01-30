@@ -8,7 +8,7 @@ import tempfile
 from gevent.fileobject import FileObject
 
 from firex_flame.event_aggregator import slim_tasks_by_uuid, COMPLETE_STATES
-from firex_flame.flame_helper import get_flame_debug_dir, query_full_tasks
+from firex_flame.flame_helper import get_flame_debug_dir, FlameTaskGraph
 
 logger = logging.getLogger(__name__)
 
@@ -162,9 +162,12 @@ def is_dump_complete(firex_logs_dir):
 
 class FlameModelDumper:
 
-    def __init__(self, firex_logs_dir=None, root_model_dir=None):
+    def __init__(self,
+                 task_graph: FlameTaskGraph,
+                 firex_logs_dir=None, root_model_dir=None):
         assert bool(firex_logs_dir) ^ bool(root_model_dir), \
             "Dumper needs exclusively either logs dir or root model dir."
+        self.task_graph = task_graph
         if firex_logs_dir:
             self.root_model_dir = get_flame_model_dir(firex_logs_dir)
         else:
@@ -181,35 +184,30 @@ class FlameModelDumper:
         _atomic_write_json(metadata_model_file, run_metadata | complete)
         return metadata_model_file
 
-    def dump_aggregator_complete_data_model(self, event_aggregator, run_metadata=None, extra_task_representations=tuple(),
+    def dump_aggregator_complete_data_model(self, run_metadata=None, extra_task_representations=tuple(),
                                             dump_task_jsons=True):
-        self.dump_complete_data_model(event_aggregator.tasks_by_uuid, event_aggregator.root_uuid, run_metadata,
-                                      dump_task_jsons)
+        self.dump_complete_data_model(run_metadata, dump_task_jsons)
         for repr_file_path in extra_task_representations:
-            self.dump_task_representation(event_aggregator.tasks_by_uuid, repr_file_path)
+            self.dump_task_representation(repr_file_path)
         Path(get_model_complete_file(root_model_dir=self.root_model_dir)).touch()
 
     def dump_full_task(self, uuid, task):
         _atomic_write_json(os.path.join(self.full_tasks_dir, f'{uuid}.json'), task)
 
-    def dump_slim_tasks(self, all_tasks_by_uuid):
-        _atomic_write_json(self.slim_tasks_file, slim_tasks_by_uuid(all_tasks_by_uuid))
+    def dump_slim_tasks(self):
+        _atomic_write_json(
+            self.slim_tasks_file,
+            slim_tasks_by_uuid(self.task_graph.tasks_by_uuid))
 
-    def dump_complete_data_model(self, tasks_by_uuid, root_uuid=None, run_metadata=None, dump_task_jsons=True):
+    def dump_complete_data_model(self, run_metadata=None, dump_task_jsons=True):
         logger.info("Starting to dump complete Flame model.")
-
-        if not root_uuid:
-            # If the root UUID wasn't already found, but there are tasks, try to find the root.
-            tasks_with_null_parent = [t for t in tasks_by_uuid.values() if t.get('parent_id', '') is None]
-            if tasks_with_null_parent:
-                root_uuid = min(tasks_with_null_parent, key=lambda t: t['task_num'])
 
         if dump_task_jsons:
             # Write JSON file with minimum amount of info to render graph.
-            self.dump_slim_tasks(tasks_by_uuid)
+            self.dump_slim_tasks()
 
             # Write one JSON file per task.
-            for uuid, task in tasks_by_uuid.items():
+            for uuid, task in self.task_graph.tasks_by_uuid.items():
                 self.dump_full_task(uuid, task)
 
         paths_to_compress = [self.slim_tasks_file, self.full_tasks_dir]
@@ -217,7 +215,8 @@ class FlameModelDumper:
             # Write metadata file.
             # Note that since a flame can terminate (e.g. via timeout) before a run, there is no guarantee
             # that the run_metadata model file will ever have root_complete: true.
-            root_complete = tasks_by_uuid.get(root_uuid, {'state': None})['state'] in COMPLETE_STATES
+            root_uuid = self.task_graph.root_uuid
+            root_complete = self.task_graph.tasks_by_uuid.get(root_uuid, {'state': None})['state'] in COMPLETE_STATES
             run_metadata_with_root = {**run_metadata, 'root_uuid': root_uuid}
             metadata_model_file = self.dump_metadata(run_metadata_with_root, root_complete, flame_complete=True)
             paths_to_compress.append(metadata_model_file)
@@ -231,7 +230,7 @@ class FlameModelDumper:
 
         logger.info("Finished dumping complete Flame model.")
 
-    def dump_task_representation(self, tasks_by_uuid, representation_file):
+    def dump_task_representation(self, representation_file):
         logger.info(f"Starting to dump task representation of: {representation_file}.")
 
         try:
@@ -240,7 +239,7 @@ class FlameModelDumper:
 
             file_basename = representation_data['model_file_name']
             out_file = os.path.join(self.root_model_dir, file_basename)
-            queried_tasks = query_full_tasks(tasks_by_uuid, representation_data['task_queries'])
+            queried_tasks = self.task_graph.query_full_tasks(representation_data['task_queries'])
             _atomic_write_json(out_file, queried_tasks)
         except Exception as ex:
             # Don't interfere with shutdown even if extra representation dumping fails.

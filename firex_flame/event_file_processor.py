@@ -6,11 +6,11 @@ import json
 from firex_flame.model_dumper import FlameModelDumper, find_flame_model_dir, get_model_full_tasks_by_names, \
     index_tasks_by_names, get_full_tasks_by_slim_pred
 from firex_flame.event_aggregator import FlameEventAggregator, TASK_ARGS
-from firex_flame.flame_helper import find_rec_file, find
+from firex_flame.flame_helper import find_rec_file, find, FlameTaskGraph
 
 
 def process_recording_file(event_aggregator: FlameEventAggregator, recording_file: str, run_metadata: dict):
-    assert os.path.isfile(recording_file), "Recording file doesn't exist: %s" % recording_file
+    assert os.path.isfile(recording_file), f"Recording file doesn't exist: {recording_file}"
 
     real_rec = os.path.realpath(recording_file)
     if real_rec.endswith('.gz'):
@@ -32,7 +32,7 @@ def process_recording_file(event_aggregator: FlameEventAggregator, recording_fil
 
     if run_metadata.get('uid', None) is None and event_aggregator.root_uuid is not None:
         root_task = event_aggregator.tasks_by_uuid[event_aggregator.root_uuid]
-        run_metadata['uid'] = find([TASK_ARGS, 'chain_args', 'uid'], root_task)
+        run_metadata['uid'] = find([TASK_ARGS, 'uid'], root_task)
         run_metadata['chain'] = find([TASK_ARGS, 'chain'], root_task)
 
 
@@ -45,7 +45,10 @@ def dumper_main():
 
     aggregator = FlameEventAggregator()
     process_recording_file(aggregator, args.rec, {})
-    FlameModelDumper(root_model_dir=args.dest_dir).dump_aggregator_complete_data_model(aggregator)
+    FlameModelDumper(
+        FlameTaskGraph(aggregator.tasks_by_uuid),
+        root_model_dir=args.dest_dir,
+    ).dump_aggregator_complete_data_model()
 
 
 def get_tasks_from_rec_file(log_dir=None, rec_filepath=None, mark_incomplete=False):

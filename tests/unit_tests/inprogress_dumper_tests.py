@@ -8,7 +8,7 @@ from firex_flame.controller import FlameAppController
 from firex_flame.event_broker_processor import RunningModelDumper
 from firex_flame.model_dumper import load_slim_tasks, get_full_task_path, get_tasks_slim_file, load_full_task, \
     _get_base_model_dir
-from firex_flame.flame_helper import wait_until_path_exist
+from firex_flame.flame_helper import wait_until_path_exist, FlameTaskGraph
 
 import gevent
 
@@ -19,11 +19,15 @@ class TaskQueryTests(unittest.TestCase):
 
     def test_write_only_slim(self):
         with tempfile.TemporaryDirectory() as log_dir:
-            flame_controller = FlameAppController({'logs_dir': log_dir}, [])
             uuid = '1'
             all_tasks_by_uuid = {uuid: {'uuid': uuid, 'name': 'hello'}}
-
-            running_model_dumper = RunningModelDumper(flame_controller, all_tasks_by_uuid)
+            running_model_dumper = RunningModelDumper(
+                FlameAppController(
+                    {'logs_dir': log_dir},
+                    [],
+                    all_tasks_by_uuid,
+                )
+            )
             running_model_dumper.queue_write_slim()
             running_model_dumper._queue.join()
 
@@ -33,7 +37,6 @@ class TaskQueryTests(unittest.TestCase):
 
     def test_write_only_tasks(self):
         with tempfile.TemporaryDirectory() as log_dir:
-            flame_controller = FlameAppController({'logs_dir': log_dir}, [])
             uuid1 = '1'
             uuid2 = '2'
             uuid3 = '3'
@@ -43,7 +46,13 @@ class TaskQueryTests(unittest.TestCase):
                 uuid3: {'uuid': uuid3, 'name': 'another name', 'flame_data': 'some other data'},
             }
 
-            running_model_dumper = RunningModelDumper(flame_controller, all_tasks_by_uuid)
+            running_model_dumper = RunningModelDumper(
+                FlameAppController(
+                    {'logs_dir': log_dir},
+                    [],
+                    all_tasks_by_uuid,
+                )
+            )
             running_model_dumper.queue_maybe_write_tasks({uuid1: 'task-started-info',
                                                           uuid2: 'task-completed',
                                                           uuid3: 'task-blocked', # this dumper will not write this task.
@@ -64,14 +73,19 @@ class TaskQueryTests(unittest.TestCase):
 
     def test_always_write_full_task_after_completed(self):
         with tempfile.TemporaryDirectory() as log_dir:
-            flame_controller = FlameAppController({'logs_dir': log_dir}, [])
             uuid1 = '1'
             initial_task = {'uuid': uuid1, 'name': 'hello', 'flame_data': 'some_data'}
             all_tasks_by_uuid = {
                 uuid1: initial_task,
             }
 
-            running_model_dumper = RunningModelDumper(flame_controller, all_tasks_by_uuid)
+            running_model_dumper = RunningModelDumper(
+                FlameAppController(
+                    {'logs_dir': log_dir},
+                    [],
+                    all_tasks_by_uuid,
+                )
+            )
             running_model_dumper.queue_maybe_write_tasks({uuid1: 'task-started-info'})
 
             running_model_dumper._queue.join()
@@ -123,17 +137,25 @@ class TaskQueryTests(unittest.TestCase):
                             },
                         ]
                     }
-                )
+                ),
+                encoding='utf-8',
             )
 
-            flame_controller = FlameAppController({'logs_dir': log_dir}, [str(extra_repr)])
             uuid1 = '1'
             all_tasks_by_uuid = {
                 uuid1: {'uuid': uuid1, 'name': 'hello', 'flame_data': 'some_data', 'parent_id': None},
             }
 
             # the model dumper writes extra task representations periodically.
-            RunningModelDumper(flame_controller, all_tasks_by_uuid, max_extra_task_repr_dump_delay=0.1)
+            controller = FlameAppController(
+                {'logs_dir': log_dir},
+                extra_task_representations=[str(extra_repr)],
+                tasks_by_uuid=all_tasks_by_uuid,
+            )
+            RunningModelDumper(
+                controller,
+                max_extra_task_repr_dump_delay=0.1,
+            )
             gevent.sleep(0.1) # allow the extra task dumpr greenlet to run.
 
             extra_repr_tasks = Path(_get_base_model_dir(log_dir), model_file_name)
@@ -144,7 +166,11 @@ class TaskQueryTests(unittest.TestCase):
             expected_task_repr = {uuid1: {'uuid': uuid1, 'name': 'hello'}}
             self.assertEqual(expected_task_repr, first_tasks_repr)
 
+            # double update necessary till aggregator moved in to controller.
             all_tasks_by_uuid['2'] = {'uuid': '2', 'name': 'hello_child', 'parent_id': uuid1}
+            controller.graph.update_graph_from_celery_events(
+                [all_tasks_by_uuid['2']]
+            )
 
             gevent.sleep(0.1) # allow the extra task dumpr greenlet to run.
 

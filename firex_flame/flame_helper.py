@@ -7,6 +7,7 @@ import time
 import signal
 from dataclasses import dataclass
 from typing import Optional, List, Any
+import hashlib
 
 from firexapp.events.model import ADDITIONAL_CHILDREN_KEY
 from firexapp.submit.uid import Uid
@@ -22,26 +23,15 @@ REVOKE_REASON_KEY = 'revoke_reason'
 # the task completes due to the revoke.
 REVOKE_TIMESTAMP_KEY = 'revoke_timestamp'
 
-
-def _get_parents_by_uuid(children_by_uuid):
-    # additiona_children makes multi-parents possible :/
-    child_to_parents_uuids = {}
-    for parent_uuid, child_uuids in children_by_uuid.items():
-        for child_uuid in child_uuids:
-            if child_uuid not in child_to_parents_uuids:
-                child_to_parents_uuids[child_uuid] = set()
-            child_to_parents_uuids[child_uuid].add(parent_uuid)
-    return child_to_parents_uuids
-
-
-# TODO: If further performance enhancements are sought, this structure could be maintained during event receiving
-#  so that it isn't re-calculated per task query.
 class FlameTaskGraph:
 
-    def __init__(self, tasks_by_uuid):
+    def __init__(self, tasks_by_uuid: dict[str, dict[str, Any]]):
+        self.root_uuid : Optional[str] = None
         self.tasks_by_uuid = tasks_by_uuid
-        self._parent_to_children_uuids = _get_children_by_uuid(tasks_by_uuid)
-        self._child_to_parents_uuids = _get_parents_by_uuid(self._parent_to_children_uuids)
+        self._parent_to_children_uuids: dict[str, set[str]] = {}
+        self._child_to_parents_uuids: dict[str, set[str]] = {}
+
+        self.update_graph_from_celery_events(tasks_by_uuid.values())
 
     def _walk_task_graph(self, task_uuid, uuids_by_uuid):
         checked_uuids = set()
@@ -50,11 +40,11 @@ class FlameTaskGraph:
         while to_check_uuids:
             uuid = to_check_uuids.pop()
             checked_uuids.add(uuid)
-            for descendant_uuid in uuids_by_uuid.get(uuid, []):
-                if descendant_uuid in self.tasks_by_uuid:
-                    result_tasks_by_uuid[descendant_uuid] = self.tasks_by_uuid[descendant_uuid]
-                if descendant_uuid not in checked_uuids:
-                    to_check_uuids.append(descendant_uuid)
+            for related_uuid in uuids_by_uuid.get(uuid, []):
+                if related_uuid in self.tasks_by_uuid:
+                    result_tasks_by_uuid[related_uuid] = self.tasks_by_uuid[related_uuid]
+                if related_uuid not in checked_uuids:
+                    to_check_uuids.append(related_uuid)
         return result_tasks_by_uuid.values()
 
     def get_descendants_of_uuid(self, task_uuid) -> list[dict[str, Any]]:
@@ -68,6 +58,64 @@ class FlameTaskGraph:
             task_uuid,
             self._child_to_parents_uuids,
         )
+
+    def _add_parent_and_child(self, parent_uuid, child_uuid):
+        if parent_uuid not in self._parent_to_children_uuids:
+            self._parent_to_children_uuids[parent_uuid] = set()
+        self._parent_to_children_uuids[parent_uuid].add(child_uuid)
+
+        if child_uuid not in self._child_to_parents_uuids:
+            self._child_to_parents_uuids[child_uuid] = set()
+        self._child_to_parents_uuids[child_uuid].add(parent_uuid)
+
+    def _maybe_set_root_uuid(self, event):
+        if self.root_uuid is None:
+            if event.get('parent_id', '__no_match') is None:
+                self.root_uuid = event['uuid']
+            elif event.get('root_id') is not None:
+                # we can still know the root if we miss the first event (the root's event with parent_id)
+                # since other events reference the root UUID via root_id.
+                self.root_uuid = event['root_id']
+
+    def _update_graph_from_celery_event(self, event):
+        event_uuid = event.get('uuid')
+        if event_uuid:
+            self._maybe_set_root_uuid(event)
+            parent_id = event.get('parent_id')
+            if parent_id:
+                self._add_parent_and_child(parent_id, event_uuid)
+
+            additional_children = event.get(ADDITIONAL_CHILDREN_KEY)
+            if additional_children:
+                for child_uuid in additional_children:
+                    self._add_parent_and_child(event_uuid, child_uuid)
+
+    def update_graph_from_celery_events(self, events):
+        for e in events:
+            self._update_graph_from_celery_event(e)
+
+    def query_partial_tasks(self, query_task_uuids, task_queries):
+        # When querying a partial set of tasks, count descendants as matches to be included in the result.
+        return _query_flame_tasks(
+            self,
+            query_task_uuids,
+            task_queries,
+            match_descendant_criteria=True)
+
+    def query_full_tasks(self, task_queries):
+        # When querying a full set of tasks, descendants will be included when their ancestors are matched.
+        return _query_flame_tasks(
+            self,
+            self.tasks_by_uuid.keys(),
+            task_queries,
+            match_descendant_criteria=False)
+
+    def get_task(self, uuid) -> Optional[dict[str, dict[str, Any]]]:
+        return self.tasks_by_uuid.get(uuid)
+
+    def get_all_task_uuids(self):
+        return set(self.tasks_by_uuid.keys())
+
 
 @dataclass(frozen=True)
 class FlameServerConfig:
@@ -325,7 +373,6 @@ def _get_descendants_for_criteria(select_paths, descendant_criteria, ancestor_uu
     for criteria in descendant_criteria:
         for descendant in ancestor_descendants:
             if task_matches_criteria(descendant, criteria):
-                # Need no_descendants=True to prevent infinite loops.
                 # The fields that are selected for each descendant are determined by all queries, except
                 # descendant descendants are never included.
                 matched_descendants_by_uuid[descendant['uuid']] = select_from_task(
@@ -361,7 +408,7 @@ def get_always_select_fields(task_queries):
 
 def select_ancestor_of_task_descendant_match(uuid, query, select_paths, task_graph: FlameTaskGraph):
     # Should the current task be included in the result because it matches some descendant criteria?
-    task = task_graph.tasks_by_uuid[uuid]
+    task = task_graph.get_task(uuid)
     matching_criteria = [criteria for criteria in query.get('selectDescendants', [])
                          if task_matches_criteria(task, criteria)]
     if matching_criteria:
@@ -375,29 +422,11 @@ def select_ancestor_of_task_descendant_match(uuid, query, select_paths, task_gra
     return None, {}
 
 
-def _get_children_by_uuid(tasks_by_uuid):
-    children_by_uuid = {
-        # Ensure every UUID has an entry in the result, even UUIDs with no children.
-        uuid: set(task.get(ADDITIONAL_CHILDREN_KEY) or [])
-        for uuid, task in tasks_by_uuid.items()
-    }
-    for task in tasks_by_uuid.values():
-        # TODO: consider handling tasks with no 'parent_id' differently from tasks with None 'parent_id',
-        #   since the latter case is the root task and the former seems inexplicable.
-        parent_id = task.get('parent_id')
-        if parent_id is not None:
-            if parent_id not in children_by_uuid:
-                children_by_uuid[parent_id] = set()
-            children_by_uuid[parent_id].add(task['uuid'])
-
-    return children_by_uuid
-
-
 def select_data_for_matches(task_uuid, task_queries, task_graph: FlameTaskGraph, match_descendant_criteria):
     result_tasks_by_uuid = {}
     always_select_fields = get_always_select_fields(task_queries)
     for query in task_queries:
-        task = task_graph.tasks_by_uuid[task_uuid]
+        task = task_graph.get_task(task_uuid)
         matches_criteria = task_matches_criteria(task, query['matchCriteria'])
         select_paths = always_select_fields + query.get('selectPaths', [])
         updates_by_uuid = {}
@@ -416,11 +445,10 @@ def select_data_for_matches(task_uuid, task_queries, task_graph: FlameTaskGraph,
     return result_tasks_by_uuid
 
 
-def _query_flame_tasks(task_uuids_to_query, task_queries, all_tasks_by_uuid, match_descendant_criteria):
+def _query_flame_tasks(task_graph: FlameTaskGraph, task_uuids_to_query, task_queries, match_descendant_criteria):
     if not _validate_task_queries(task_queries):
         return {}
 
-    task_graph = FlameTaskGraph(all_tasks_by_uuid)
     result_tasks_by_uuid = {}
     for uuid in task_uuids_to_query:
         selected_tasks_by_uuid = select_data_for_matches(uuid, task_queries, task_graph, match_descendant_criteria)
@@ -429,18 +457,5 @@ def _query_flame_tasks(task_uuids_to_query, task_queries, all_tasks_by_uuid, mat
     return result_tasks_by_uuid
 
 
-def query_full_tasks(all_tasks_by_uuid, task_queries):
-    # When querying a full set of tasks, descendants will be included when their ancestors are matched.
-    return _query_flame_tasks(all_tasks_by_uuid.keys(), task_queries, all_tasks_by_uuid,
-                              match_descendant_criteria=False)
-
-
-def query_partial_tasks(task_uuids_to_query, task_queries, all_tasks_by_uuid):
-    # When querying a partial set of tasks, count descendants as matches to be included in the result.
-    return _query_flame_tasks(task_uuids_to_query, task_queries, all_tasks_by_uuid,
-                              match_descendant_criteria=True)
-
-
 def get_dict_json_md5(query_config):
-    import hashlib
     return hashlib.md5(json.dumps(query_config, sort_keys=True).encode('utf-8')).hexdigest()
