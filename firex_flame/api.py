@@ -200,7 +200,7 @@ def create_socketio_task_api(
     def emit_frontend_tasks_by_uuid(sid, data=None):
         """ Send 'slim' fields for all tasks. This allows visualization of the graph."""
         if data and 'task_queries' in data:
-            tasks_to_send = controller.graph.query_full_tasks(data['task_queries'])
+            tasks_to_send = controller.query_full_tasks(data['task_queries'])
         else:
             tasks_to_send = slim_tasks_by_uuid(event_aggregator.tasks_by_uuid)
         controller.sio_server.emit('graph-state', tasks_to_send, room=sid)

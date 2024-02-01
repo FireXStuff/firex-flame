@@ -33,6 +33,7 @@ setup(name='firex_flame',
             "gevent-websocket",
             "gevent",
             "importlib-resources",
+            "jsonpath-ng",
       ],
       package_data={
         'firex_flame': ['templates/*.html'],

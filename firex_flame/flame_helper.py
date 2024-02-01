@@ -8,9 +8,13 @@ import signal
 from dataclasses import dataclass
 from typing import Optional, List, Any
 import hashlib
+import re
+import copy
 
 from firexapp.events.model import ADDITIONAL_CHILDREN_KEY
 from firexapp.submit.uid import Uid
+
+import jsonpath_ng
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +26,8 @@ REVOKE_REASON_KEY = 'revoke_reason'
 # the revoked signal, which is different from when
 # the task completes due to the revoke.
 REVOKE_TIMESTAMP_KEY = 'revoke_timestamp'
+
+LIST_PATH_ENTRY = re.compile(r'^\[(\d+)\]$')
 
 class FlameTaskGraph:
 
@@ -339,32 +345,64 @@ def task_matches_criteria(task: dict, criteria: dict):
 
     return False
 
-
-def _create_dict_with_path_val(path_list, val):
-    r = {}
-    lastest_dict = r
-    for i, e in enumerate(path_list):
-        is_last = i == len(path_list) - 1
-        if is_last:
-            lastest_dict[e] = val
+def _add_path_to_container(container, path_list, val):
+    if not path_list:
+        return
+    if len(path_list) == 1:
+        final_key = path_list[0]
+        is_list = LIST_PATH_ENTRY.match(final_key)
+        if is_list:
+            container.append(val)
         else:
-            lastest_dict[e] = {}
-            lastest_dict = lastest_dict[e]
-    return r
+            container[final_key] = val
+    else:
+        cur_key = path_list.pop(0)
+        is_cur_list = LIST_PATH_ENTRY.match(cur_key)
+        if is_cur_list:
+            cur_key = int(is_cur_list.group(1))
 
-
-def _get_paths_from_task(paths, task):
-    r = {}
-    for path in paths:
-        try:
-            path_list = path.split('.')
-            val = find(path_list, task, raise_error=True)
-        except PathNotFoundException:
-            # Don't update the results dict if the current task doesn't have the path.
-            pass
+        if isinstance(container, list):
+            container_keys = range(len(container))
         else:
-            r = deep_merge(r, _create_dict_with_path_val(path_list, val))
-    return r
+            container_keys = container.keys()
+
+        if cur_key not in container_keys:
+            is_next_list = LIST_PATH_ENTRY.match(path_list[0])
+            if is_next_list:
+                next_container = []
+            else:
+                next_container = {}
+
+            if isinstance(container, list):
+                container.append(next_container)
+            else:
+                container[cur_key] = next_container
+        else:
+            next_container = container[cur_key]
+
+        _add_path_to_container(next_container, path_list, val)
+
+
+def _container_from_json_paths_to_values(json_paths_to_values):
+    container = {}
+    for path_str in sorted(json_paths_to_values):
+        _add_path_to_container(
+            container,
+            path_str.split('.'),
+            json_paths_to_values[path_str])
+    return container
+
+
+def _jsonpath_get_paths(jsonpath_exprs, task):
+    matching_paths_to_values = {}
+    for jsonpath_expr in jsonpath_exprs:
+        matching_paths_to_values.update(
+            {
+                str(match.full_path): match.value
+                for match in jsonpath_expr.find(task)
+            }
+        )
+    return _container_from_json_paths_to_values(matching_paths_to_values)
 
 
 def _get_descendants_for_criteria(select_paths, descendant_criteria, ancestor_uuid, task_graph: FlameTaskGraph):
@@ -386,7 +424,7 @@ def _get_descendants_for_criteria(select_paths, descendant_criteria, ancestor_uu
 
 def select_from_task(select_paths, select_descendants, task, task_graph: FlameTaskGraph):
     selected_dict = {}
-    paths_update_dict = _get_paths_from_task(select_paths, task)
+    paths_update_dict = _jsonpath_get_paths(select_paths, task)
     selected_dict.update(paths_update_dict)
 
     selected_descendants_by_uuid = _get_descendants_for_criteria(select_paths, select_descendants, task['uuid'],
@@ -431,8 +469,11 @@ def select_data_for_matches(task_uuid, task_queries, task_graph: FlameTaskGraph,
         select_paths = always_select_fields + query.get('selectPaths', [])
         updates_by_uuid = {}
         if matches_criteria:
-            updates_by_uuid[task_uuid] = select_from_task(select_paths, query.get('selectDescendants', []), task,
-                                                          task_graph)
+            updates_by_uuid[task_uuid] = select_from_task(
+                select_paths,
+                query.get('selectDescendants', []),
+                task,
+                task_graph)
 
         if match_descendant_criteria:
             uuid, task_update = select_ancestor_of_task_descendant_match(task_uuid, query, select_paths, task_graph)
@@ -459,3 +500,11 @@ def _query_flame_tasks(task_graph: FlameTaskGraph, task_uuids_to_query, task_que
 
 def get_dict_json_md5(query_config):
     return hashlib.md5(json.dumps(query_config, sort_keys=True).encode('utf-8')).hexdigest()
+
+
+def convert_json_paths_in_query(task_queries):
+    result = copy.deepcopy(task_queries)
+    for query in result:
+        if 'selectPaths' in query:
+            query['selectPaths'] = [jsonpath_ng.parse(f'$.{p}') for p in query['selectPaths']]
+    return result

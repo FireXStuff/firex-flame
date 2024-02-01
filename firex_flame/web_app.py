@@ -176,8 +176,11 @@ def start_web_server(
     celery_app,
 ) -> pywsgi.WSGIServer:
     web_app = create_web_app(run_metadata, server_config.serve_logs_dir)
-    # TODO: parametrize cors_allowed_origins.
-    controller.sio_server = socketio.Server(cors_allowed_origins='*', async_mode='gevent')
+
+    controller.set_sio_server(
+        # TODO: parametrize cors_allowed_origins.
+        socketio.Server(cors_allowed_origins='*', async_mode='gevent')
+    )
     sio_web_app = socketio.WSGIApp(controller.sio_server, web_app)
 
     create_socketio_task_api(controller, event_aggregator, run_metadata)

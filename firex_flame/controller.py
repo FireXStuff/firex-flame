@@ -1,12 +1,13 @@
 import logging
 from typing import Any, Optional
-import socketio
 import time
 
 from firex_flame.event_aggregator import slim_tasks_by_uuid
-from firex_flame.model_dumper import FlameModelDumper
+from firex_flame.model_dumper import FlameModelDumper, load_tasks_representation_task_queries
 from firex_flame.flame_helper import get_dict_json_md5, REVOKE_REASON_KEY, \
-    REVOKE_TIMESTAMP_KEY, FlameTaskGraph
+    REVOKE_TIMESTAMP_KEY, FlameTaskGraph, convert_json_paths_in_query
+import socketio
+
 
 logger = logging.getLogger(__name__)
 
@@ -108,11 +109,12 @@ class FlameAppController:
         config_md5 = get_dict_json_md5(query_config)
         if config_md5 not in self.listening_query_config_hashes_to_sids:
             self.listening_query_config_hashes_to_sids[config_md5] = {
-                'query_config': query_config,
+                'query_config': convert_json_paths_in_query(query_config),
                 'client_sids': set(),
             }
-        self.listening_query_config_hashes_to_sids[config_md5]['client_sids'].add(sid)
-        self.sio_server.enter_room(sid, room=config_md5)
+        if sid:
+            self.listening_query_config_hashes_to_sids[config_md5]['client_sids'].add(sid)
+            self.sio_server.enter_room(sid, room=config_md5)
 
     def remove_client_task_query(self, sid):
         for config_md5, config in self.listening_query_config_hashes_to_sids.items():
@@ -125,3 +127,20 @@ class FlameAppController:
 
     def get_all_task_uuids(self):
         return self.graph.get_all_task_uuids()
+
+    def set_sio_server(self, sio_server):
+        self.sio_server = sio_server
+        for repr_file in self.extra_task_representations:
+            # This caches jsonpath parsing.
+            self.add_client_task_query_config(
+                sid=None,
+                query_config=load_tasks_representation_task_queries(repr_file)
+            )
+
+    def query_full_tasks(self, task_queries):
+        q_hash = get_dict_json_md5(task_queries)
+        if q_hash in self.listening_query_config_hashes_to_sids:
+            task_queries = self.listening_query_config_hashes_to_sids[q_hash]['query_config']
+        else:
+            task_queries = convert_json_paths_in_query(task_queries)
+        return self.graph.query_full_tasks(task_queries)

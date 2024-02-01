@@ -8,7 +8,8 @@ import tempfile
 from gevent.fileobject import FileObject
 
 from firex_flame.event_aggregator import slim_tasks_by_uuid, COMPLETE_STATES
-from firex_flame.flame_helper import get_flame_debug_dir, FlameTaskGraph
+from firex_flame.flame_helper import get_flame_debug_dir, FlameTaskGraph, \
+    convert_json_paths_in_query
 
 logger = logging.getLogger(__name__)
 
@@ -234,16 +235,22 @@ class FlameModelDumper:
         logger.info(f"Starting to dump task representation of: {representation_file}.")
 
         try:
-            with open(representation_file, encoding='utf-8') as fp:
-                representation_data = json.load(fp)
-
-            file_basename = representation_data['model_file_name']
-            out_file = os.path.join(self.root_model_dir, file_basename)
-            queried_tasks = self.task_graph.query_full_tasks(representation_data['task_queries'])
+            representation_data = load_tasks_representation(representation_file)
+            out_file = os.path.join(self.root_model_dir, representation_data['model_file_name'])
+            queried_tasks = self.task_graph.query_full_tasks(
+                convert_json_paths_in_query(representation_data['task_queries'])
+            )
             _atomic_write_json(out_file, queried_tasks)
         except Exception as ex:
             # Don't interfere with shutdown even if extra representation dumping fails.
             logger.error(f"Failed to dump representation of {representation_file}.")
             logger.exception(ex)
         else:
-            logger.info(f"Finished dumping task representation of: {representation_file}.")
+            logger.info(f"Finished dumping {len(queried_tasks)} task representation of {representation_file} to {out_file}.")
+
+def load_tasks_representation(rep_file):
+    with open(rep_file, encoding='utf-8') as fp:
+        return json.load(fp)
+
+def load_tasks_representation_task_queries(rep_file):
+    return load_tasks_representation(rep_file)['task_queries']
