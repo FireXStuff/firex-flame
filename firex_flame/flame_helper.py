@@ -6,7 +6,7 @@ import psutil
 import time
 import signal
 from dataclasses import dataclass
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Union
 import hashlib
 import re
 import copy
@@ -345,51 +345,63 @@ def task_matches_criteria(task: dict, criteria: dict):
 
     return False
 
-def _add_path_to_container(container, path_list, val):
-    if not path_list:
-        return
-    if len(path_list) == 1:
-        final_key = path_list[0]
-        is_list = LIST_PATH_ENTRY.match(final_key)
-        if is_list:
-            container.append(val)
-        else:
-            container[final_key] = val
-    else:
-        cur_key = path_list.pop(0)
-        is_cur_list = LIST_PATH_ENTRY.match(cur_key)
-        if is_cur_list:
-            cur_key = int(is_cur_list.group(1))
 
-        if isinstance(container, list):
-            container_keys = range(len(container))
-        else:
-            container_keys = container.keys()
+def _add_path_to_container(top_container: dict[str, Any], path_list: tuple[Union[str,int]], val):
+    latest_container = top_container
+    for i, cur_key in enumerate(path_list):
+        is_last_key = i == len(path_list) - 1
+        is_latest_list = isinstance(latest_container, list)
 
-        if cur_key not in container_keys:
-            is_next_list = LIST_PATH_ENTRY.match(path_list[0])
-            if is_next_list:
-                next_container = []
+        if is_latest_list:
+            latest_cont_keys = range(len(latest_container))
+        else:
+            latest_cont_keys = latest_container.keys()
+
+        if is_last_key:
+            # Last key, set value instead of finding next container.
+            if is_latest_list and cur_key not in latest_cont_keys:
+                latest_container.append(val)
             else:
-                next_container = {}
-
-            if isinstance(container, list):
-                container.append(next_container)
-            else:
-                container[cur_key] = next_container
+                latest_container[cur_key] = val
         else:
-            next_container = container[cur_key]
+            # not last key, find or create next container.
+            if cur_key not in latest_cont_keys:
+                is_next_list = isinstance(path_list[i+1], int)
+                if is_next_list:
+                    next_container = []
+                else:
+                    next_container = {}
 
-        _add_path_to_container(next_container, path_list, val)
+                if is_latest_list:
+                    latest_container.append(next_container) # assume integer keys pre-sorted.
+                else:
+                    latest_container[cur_key] = next_container
+            else:
+                next_container = latest_container[cur_key]
+            latest_container = next_container
 
 
-def _container_from_json_paths_to_values(json_paths_to_values):
+def _int_index_or_key(json_key_part_str):
+    m = LIST_PATH_ENTRY.match(json_key_part_str)
+    if m:
+        return int(m.group(1))
+    return json_key_part_str
+
+def _container_from_json_paths_to_values(json_paths_to_values: list[str]):
+
+    # if 'da6ca77b-1476-4edd-8d4c-4fc3b72f081b' in json_paths_to_values.values():
+    #     print(json_paths_to_values)
+
     container = {}
-    for path_str in sorted(json_paths_to_values):
+    parsed_key_paths_to_values = {
+        tuple(_int_index_or_key(str_k_part) for str_k_part in k.split('.')): v
+        for k, v in json_paths_to_values.items()
+    }
+    for path_tuple, value in sorted(parsed_key_paths_to_values.items(), key=lambda kv: kv[0]):
         _add_path_to_container(
             container,
-            path_str.split('.'),
-            json_paths_to_values[path_str])
+            path_tuple,
+            value)
     return container
 
 

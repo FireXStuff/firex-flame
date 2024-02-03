@@ -2,7 +2,7 @@ import os
 import unittest
 
 from firex_flame.flame_helper import FlameTaskGraph, find, _jsonpath_get_paths, \
-    convert_json_paths_in_query
+    convert_json_paths_in_query, _container_from_json_paths_to_values
 
 from firexapp.events.model import ADDITIONAL_CHILDREN_KEY
 import jsonpath_ng
@@ -205,6 +205,32 @@ class TaskQueryTests(unittest.TestCase):
 
         full_query_result = FlameTaskGraph(all_tasks).query_full_tasks(queries)
         self.assertEqual(full_query_result, expected)
+
+    def test_data_from_json_paths(self):
+        self.assertEqual(
+            _container_from_json_paths_to_values(
+                {'a': 1},
+            ),
+            {'a': 1},
+        )
+        self.assertEqual(
+            _container_from_json_paths_to_values(
+                {'a.[0]': 1},
+            ),
+            {'a': [1]},
+        )
+        self.assertEqual(
+            _container_from_json_paths_to_values(
+                {
+                    'a.[2].b': 1,
+                    'a.[100].b': 2,
+                    'a.[0].c': 0,
+                    'b': 3,
+                },
+            ),
+            {'a': [{'c': 0}, {'b': 1}, {'b': 2}], 'b': 3},
+        )
+
 
     def test_select_list_from_task(self):
         task = {'field1': {'list': [{'ignored': 1, 'field2': 1}, {'field2': 2, 'field3': 3}]}}
