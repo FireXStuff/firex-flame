@@ -143,6 +143,7 @@ class FlameLauncher(TrackingService):
                                  close_fds=True,
                                  env=select_env_vars(['PATH']),
                                  preexec_fn=os.setpgrp, # Avoid SIGINTs sent to FireX by having own process group.
+                                 cwd=flame_debug_dir,
                                  )
         except Exception as e:
             logger.error("Flame subprocess start failed: %s." % e)
