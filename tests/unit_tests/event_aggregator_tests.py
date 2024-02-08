@@ -1,51 +1,58 @@
 import unittest
 
-from firex_flame.event_aggregator import FlameEventAggregator
+from firex_flame.flame_task_graph import FlameEventAggregator, FlameTaskGraph, _TaskFieldSentile
 
 basic_event = {'uuid': '1', 'long_name': 'prefix.SomeTask', 'type': 'task-started', 'local_received': 0}
 basic_event_added_fields = {
-            'state': basic_event['type'],
-            'task_num': 1,
-            'name': 'SomeTask',
-            'first_started': basic_event['local_received'],
-            'latest_timestamp': basic_event['local_received'],
-            'was_revoked': False,
-            'states': [{'state': basic_event['type'], 'timestamp': basic_event['local_received']}],
-        }
+    'state': basic_event['type'],
+    'task_num': 1,
+    'name': 'SomeTask',
+    'first_started': basic_event['local_received'],
+    'latest_timestamp': basic_event['local_received'],
+    'was_revoked': False,
+    'has_completed': False,
+    'states': [{'state': basic_event['type'], 'timestamp': basic_event['local_received']}],
+}
 
 
 class EventAggregatorTests(unittest.TestCase):
 
     def test_add_new_task(self):
-        aggregator = FlameEventAggregator()
+        aggregator = FlameEventAggregator({})
 
         aggregator.aggregate_events([basic_event])
 
         expected_task = {**basic_event, **basic_event_added_fields}
         expected_task.pop('local_received')
-        self.assertEqual({expected_task['uuid']: expected_task}, aggregator.tasks_by_uuid)
+        self.assertEqual(
+            {expected_task['uuid']: expected_task},
+            {u: t.as_dict() for u, t in aggregator._tasks_by_uuid.items()},
+        )
 
     def test_ignore_missing_uuid(self):
-        aggregator = FlameEventAggregator()
+        aggregator = FlameEventAggregator({})
 
         event = dict(basic_event)
         event.pop('uuid')
 
         aggregator.aggregate_events([event])
-        self.assertEqual({}, aggregator.tasks_by_uuid)
+        self.assertEqual({}, aggregator._tasks_by_uuid)
 
     def test_no_copy_unknown_field(self):
-        aggregator = FlameEventAggregator()
+        aggregator = FlameEventAggregator({})
 
         event = dict(basic_event)
         unknown_key = '__fake__field'
         event[unknown_key] = 'value'
 
         aggregator.aggregate_events([event])
-        self.assertTrue(unknown_key not in aggregator.tasks_by_uuid[event['uuid']])
+        self.assertEqual(
+            aggregator._tasks_by_uuid[event['uuid']].get_field(unknown_key),
+            _TaskFieldSentile.UNSET,
+        )
 
     def test_merge_flame_data(self):
-        aggregator = FlameEventAggregator()
+        aggregator = FlameEventAggregator({})
 
         event1 = dict(basic_event)
         event1['flame_data'] = {
@@ -63,10 +70,12 @@ class EventAggregatorTests(unittest.TestCase):
         changed_data = aggregator.aggregate_events([event2])
 
         self.assertEqual({event1['uuid']: {'flame_data': expected_final_flame_data}}, changed_data)
-        self.assertEqual(expected_final_flame_data, aggregator.tasks_by_uuid[event1['uuid']]['flame_data'])
+        self.assertEqual(
+            expected_final_flame_data,
+            aggregator._tasks_by_uuid[event1['uuid']].get_field('flame_data'))
 
     def test_aggregate_states(self):
-        aggregator = FlameEventAggregator()
+        aggregator = FlameEventAggregator({})
 
         event1 = dict(basic_event)
         events = [
@@ -78,21 +87,20 @@ class EventAggregatorTests(unittest.TestCase):
 
         aggregator.aggregate_events(events)
 
-        aggregated_states = aggregator.tasks_by_uuid[event1['uuid']]['states']
+        aggregated_states = aggregator._tasks_by_uuid[event1['uuid']].get_field('states')
         expected_states = [{'state': e['type'], 'timestamp': e['local_received']} for e in events]
         self.assertEqual(expected_states, aggregated_states)
 
     def test_capture_root(self):
-        aggregator = FlameEventAggregator()
-
+        graph  = FlameTaskGraph({})
         event1 = {'parent_id': None, **basic_event}
         event2 = {**event1, 'parent_id': event1['uuid'], 'uuid': 2}
 
-        aggregator.aggregate_events([event1, event2])
-        self.assertEqual(event1['uuid'], aggregator.root_uuid)
+        graph.update_graph_from_celery_events([event1, event2])
+        self.assertEqual(event1['uuid'], graph.root_uuid)
 
     def test_states_aggregated(self):
-        aggregator = FlameEventAggregator()
+        aggregator = FlameEventAggregator({})
 
         event2 = {**basic_event,
                   'type': 'task-blocked',
@@ -104,23 +112,23 @@ class EventAggregatorTests(unittest.TestCase):
             {'state': basic_event['type'], 'timestamp': basic_event['local_received']},
             {'state': event2['type'], 'timestamp': event2['local_received']},
         ]
-        self.assertEqual(expected_states, aggregator.tasks_by_uuid[basic_event['uuid']]['states'])
+        self.assertEqual(expected_states, aggregator._tasks_by_uuid[basic_event['uuid']].get_field('states'))
 
     def test_aggregate_non_celery_field(self):
-        aggregator = FlameEventAggregator()
+        aggregator = FlameEventAggregator({})
         event1 = {**basic_event, 'url': 'some_url'}
 
         aggregator.aggregate_events([event1])
         # The rule for the celery key 'url' creates a new key 'logs_url'. This test verifies non-celery keys are
         # propagated.
-        self.assertEqual('some_url', aggregator.tasks_by_uuid[basic_event['uuid']]['logs_url'])
+        self.assertEqual('some_url', aggregator._tasks_by_uuid[basic_event['uuid']].get_field('logs_url'))
 
     def test_late_root_uuid(self):
-        aggregator = FlameEventAggregator()
+        graph  = FlameTaskGraph({})
 
         root_id = "b954db0d-e308-4cd4-bcd9-dbbed3982067"
         flame_data = {'key': 'value'}
-        aggregator.aggregate_events([
+        graph.update_graph_from_celery_events([
             {"freq": 5, "sw_ident": "py-celery", "sw_ver": "9.9.9", "sw_sys": "Linux", "timestamp": 1670605159.61279, "type": "worker-heartbeat", "local_received": 1670605159.613447},
             {
                 "uuid": "92b47986-7c9e-47b8-8949-bf3c047fd726", "name": "firexapp.submit.report_trigger.RunInitialReport",
@@ -133,6 +141,6 @@ class EventAggregatorTests(unittest.TestCase):
             {"uuid": "b954db0d-e308-4cd4-bcd9-dbbed3982067", "timestamp": 1670605164.6375537, "type": "task-send-flame", 'flame_data': flame_data, "local_received": 1670605164.646939},
         ])
 
-        self.assertEqual(root_id, aggregator.root_uuid)
+        self.assertEqual(root_id, graph.root_uuid)
         # Make sure subsequent events to root ID are aggregated.
-        self.assertEqual(flame_data, aggregator.tasks_by_uuid[root_id]['flame_data'])
+        self.assertEqual(flame_data, graph.get_root_task()['flame_data'])

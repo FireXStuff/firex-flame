@@ -2,19 +2,15 @@ import json
 import logging
 import os
 from pathlib import Path
-import tarfile
 import tempfile
-
 from gevent.fileobject import FileObject
 
-from firex_flame.event_aggregator import slim_tasks_by_uuid, COMPLETE_STATES
-from firex_flame.flame_helper import get_flame_debug_dir, FlameTaskGraph, \
-    convert_json_paths_in_query
+from firex_flame.flame_helper import get_flame_debug_dir
 
 logger = logging.getLogger(__name__)
 
 
-def _atomic_write_json(filename, data):
+def atomic_write_json(filename, data):
     filename = os.path.realpath(filename)
     filedir = os.path.dirname(filename)
     with tempfile.NamedTemporaryFile(mode='w',
@@ -151,106 +147,28 @@ def get_model_full_tasks_by_names(log_dir, task_names):
     return index_tasks_by_names(tasks_by_uuid.values(), task_names)
 
 
+def get_model_slim_tasks_by_names(log_dir, task_names):
+    if isinstance(task_names, str):
+        task_names = [task_names]
+    tasks_by_uuid = get_slim_tasks_by_slim_pred(
+        log_dir,
+        lambda st: st.get('name') in task_names)
+    return index_tasks_by_names(tasks_by_uuid.values(), task_names)
+
 def get_full_tasks_by_slim_pred(log_dir, slim_predicate):
-    return {uuid: load_full_task(log_dir, uuid)
-            for uuid, slim_task in load_slim_tasks(log_dir).items()
-            if slim_predicate(slim_task)}
+    return {
+        uuid: load_full_task(log_dir, uuid)
+        for uuid in get_slim_tasks_by_slim_pred(log_dir, slim_predicate)
+    }
+
+def get_slim_tasks_by_slim_pred(log_dir, slim_predicate):
+    return {
+        uuid: slim_task
+        for uuid, slim_task in load_slim_tasks(log_dir).items()
+        if slim_predicate(slim_task)
+    }
 
 
 def is_dump_complete(firex_logs_dir):
     return os.path.exists(get_model_complete_file(firex_logs_dir=firex_logs_dir))
 
-
-class FlameModelDumper:
-
-    def __init__(self,
-                 task_graph: FlameTaskGraph,
-                 firex_logs_dir=None, root_model_dir=None):
-        assert bool(firex_logs_dir) ^ bool(root_model_dir), \
-            "Dumper needs exclusively either logs dir or root model dir."
-        self.task_graph = task_graph
-        if firex_logs_dir:
-            self.root_model_dir = get_flame_model_dir(firex_logs_dir)
-        else:
-            self.root_model_dir = root_model_dir
-        os.makedirs(self.root_model_dir, exist_ok=True)
-
-        self.full_tasks_dir = get_all_tasks_dir(root_model_dir=self.root_model_dir)
-        os.makedirs(self.full_tasks_dir, exist_ok=True)
-        self.slim_tasks_file = get_tasks_slim_file(root_model_dir=self.root_model_dir)
-
-    def dump_metadata(self, run_metadata, root_complete, flame_complete):
-        metadata_model_file = get_run_metadata_file(root_model_dir=self.root_model_dir)
-        complete = {'run_complete': root_complete, 'flame_recv_complete': flame_complete}
-        _atomic_write_json(metadata_model_file, run_metadata | complete)
-        return metadata_model_file
-
-    def dump_aggregator_complete_data_model(self, run_metadata=None, extra_task_representations=tuple(),
-                                            dump_task_jsons=True):
-        self.dump_complete_data_model(run_metadata, dump_task_jsons)
-        for repr_file_path in extra_task_representations:
-            self.dump_task_representation(repr_file_path)
-        Path(get_model_complete_file(root_model_dir=self.root_model_dir)).touch()
-
-    def dump_full_task(self, uuid, task):
-        _atomic_write_json(os.path.join(self.full_tasks_dir, f'{uuid}.json'), task)
-
-    def dump_slim_tasks(self):
-        _atomic_write_json(
-            self.slim_tasks_file,
-            slim_tasks_by_uuid(self.task_graph.tasks_by_uuid))
-
-    def dump_complete_data_model(self, run_metadata=None, dump_task_jsons=True):
-        logger.info("Starting to dump complete Flame model.")
-
-        if dump_task_jsons:
-            # Write JSON file with minimum amount of info to render graph.
-            self.dump_slim_tasks()
-
-            # Write one JSON file per task.
-            for uuid, task in self.task_graph.tasks_by_uuid.items():
-                self.dump_full_task(uuid, task)
-
-        paths_to_compress = [self.slim_tasks_file, self.full_tasks_dir]
-        if run_metadata:
-            # Write metadata file.
-            # Note that since a flame can terminate (e.g. via timeout) before a run, there is no guarantee
-            # that the run_metadata model file will ever have root_complete: true.
-            root_uuid = self.task_graph.root_uuid
-            root_complete = self.task_graph.tasks_by_uuid.get(root_uuid, {'state': None})['state'] in COMPLETE_STATES
-            run_metadata_with_root = {**run_metadata, 'root_uuid': root_uuid}
-            metadata_model_file = self.dump_metadata(run_metadata_with_root, root_complete, flame_complete=True)
-            paths_to_compress.append(metadata_model_file)
-
-        # TODO: use shutil.which to find out of there is a native tar command, and use that when present to speedup
-        #  shutdown.
-        # Write a tar.gz file containing all the files dumped above.
-        with tarfile.open(os.path.join(self.root_model_dir, 'full-run-state.tar.gz'), "w:gz") as tar:
-            for path in paths_to_compress:
-                tar.add(path, arcname=os.path.basename(path))
-
-        logger.info("Finished dumping complete Flame model.")
-
-    def dump_task_representation(self, representation_file):
-        logger.info(f"Starting to dump task representation of: {representation_file}.")
-
-        try:
-            representation_data = load_tasks_representation(representation_file)
-            out_file = os.path.join(self.root_model_dir, representation_data['model_file_name'])
-            queried_tasks = self.task_graph.query_full_tasks(
-                convert_json_paths_in_query(representation_data['task_queries'])
-            )
-            _atomic_write_json(out_file, queried_tasks)
-        except Exception as ex:
-            # Don't interfere with shutdown even if extra representation dumping fails.
-            logger.error(f"Failed to dump representation of {representation_file}.")
-            logger.exception(ex)
-        else:
-            logger.info(f"Finished dumping {len(queried_tasks)} task representation of {representation_file} to {out_file}.")
-
-def load_tasks_representation(rep_file):
-    with open(rep_file, encoding='utf-8') as fp:
-        return json.load(fp)
-
-def load_tasks_representation_task_queries(rep_file):
-    return load_tasks_representation(rep_file)['task_queries']

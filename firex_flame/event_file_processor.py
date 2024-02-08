@@ -1,15 +1,14 @@
-import argparse
 import os
 import gzip
 import json
 
-from firex_flame.model_dumper import FlameModelDumper, find_flame_model_dir, get_model_full_tasks_by_names, \
+from firex_flame.model_dumper import find_flame_model_dir, get_model_full_tasks_by_names, \
     index_tasks_by_names, get_full_tasks_by_slim_pred
-from firex_flame.event_aggregator import FlameEventAggregator, TASK_ARGS
-from firex_flame.flame_helper import find_rec_file, find, FlameTaskGraph
+from firex_flame.flame_task_graph import TASK_ARGS
+from firex_flame.flame_helper import find_rec_file, find
+from firex_flame.controller import FlameAppController
 
-
-def process_recording_file(event_aggregator: FlameEventAggregator, recording_file: str, run_metadata: dict):
+def process_recording_file(flame_controller: FlameAppController, recording_file: str):
     assert os.path.isfile(recording_file), f"Recording file doesn't exist: {recording_file}"
 
     real_rec = os.path.realpath(recording_file)
@@ -21,34 +20,19 @@ def process_recording_file(event_aggregator: FlameEventAggregator, recording_fil
             event_lines = rec.readlines()
 
     for event_line in event_lines:
-        if not event_line:
-            continue
-        event = json.loads(event_line)
-        event_aggregator.aggregate_events([event])
+        if event_line:
+            event = json.loads(event_line)
+            flame_controller.update_graph_and_sio_clients([event])
 
-    if event_aggregator.is_root_complete():
+    if flame_controller.is_root_complete():
         # Kludge incomplete runstates that will never become terminal.
-        event_aggregator.aggregate_events(event_aggregator.generate_incomplete_events())
+        flame_controller.finalize_all_tasks()
 
-    if run_metadata.get('uid', None) is None and event_aggregator.root_uuid is not None:
-        root_task = event_aggregator.tasks_by_uuid[event_aggregator.root_uuid]
-        run_metadata['uid'] = find([TASK_ARGS, 'uid'], root_task)
-        run_metadata['chain'] = find([TASK_ARGS, 'chain'], root_task)
-
-
-def dumper_main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--rec', help='Recording file to construct model from.')
-    parser.add_argument('--dest_dir', help='Directory to which model should be dumped.')
-
-    args = parser.parse_args()
-
-    aggregator = FlameEventAggregator()
-    process_recording_file(aggregator, args.rec, {})
-    FlameModelDumper(
-        FlameTaskGraph(aggregator.tasks_by_uuid),
-        root_model_dir=args.dest_dir,
-    ).dump_aggregator_complete_data_model()
+    if not flame_controller.run_metadata.get('uid'):
+        root_task = flame_controller.graph.get_root_task()
+        if root_task:
+            flame_controller.run_metadata['uid'] = find([TASK_ARGS, 'uid'], root_task)
+            flame_controller.run_metadata['chain'] = find([TASK_ARGS, 'chain'], root_task)
 
 
 def get_tasks_from_rec_file(log_dir=None, rec_filepath=None, mark_incomplete=False):
@@ -57,14 +41,14 @@ def get_tasks_from_rec_file(log_dir=None, rec_filepath=None, mark_incomplete=Fal
         rec_file = find_rec_file(log_dir)
     else:
         rec_file = rec_filepath
-    assert os.path.exists(rec_file), "Recording file not found: %s" % rec_file
-    aggregator = FlameEventAggregator()
-    process_recording_file(aggregator, rec_file, {})
+    assert os.path.exists(rec_file), f"Recording file not found: {rec_file}"
+    flame_controller = FlameAppController({})
+    process_recording_file(flame_controller, rec_file)
 
     if mark_incomplete:
-        aggregator.aggregate_events(aggregator.generate_incomplete_events())
+        flame_controller.finalize_all_tasks()
 
-    return aggregator.tasks_by_uuid, aggregator.root_uuid
+    return flame_controller.graph.get_full_tasks_by_uuid(), flame_controller.graph.root_uuid
 
 
 def get_model_or_rec_full_tasks_by_names(logs_dir, task_names):
@@ -89,8 +73,3 @@ def get_model_or_rec_full_tasks_by_uuids(logs_dir, uuids):
         return {u: t for u, t in tasks_by_uuid.items() if u in uuids}
 
     raise Exception("Found neither model directory or rec_file, no source of task data in: %s" % logs_dir)
-
-
-def get_model_or_rec_full_task(logs_dir, uuid):
-    task_by_uuid = get_model_or_rec_full_tasks_by_uuids(logs_dir, [uuid])
-    return task_by_uuid[uuid]
