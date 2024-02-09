@@ -168,12 +168,12 @@ class BrokerEventConsumerThread(threading.Thread):
 
         # Append the event to the recording file if it is specified
         if self.open_recording_file:
-            json.dump(event, self.open_recording_file)
-            self.open_recording_file.write("\n")
+            # the rec file is just for the record, doesn't matter
+            _safe_dump_json_line(event, self.open_recording_file)
 
         if self._event_count % 100 == 0:
             if self.open_recording_file:
-                self.open_recording_file.flush()
+                _safe_flush(self.open_recording_file) # the rec file is just for the record, doesn't matter
             _log_event_received(event, self._event_count)
         self._event_count += 1
 
@@ -185,3 +185,17 @@ class BrokerEventConsumerThread(threading.Thread):
         ):
             logger.info("Stopping Celery event receiver because all tasks are complete.")
             self.celery_event_receiver.should_stop = True
+
+
+def _safe_dump_json_line(data, open_file: TextIOWrapper):
+    try:
+        json.dump(data, open_file)
+        open_file.write("\n")
+    except OSError:
+        pass
+
+def _safe_flush(open_file: TextIOWrapper):
+    try:
+        open_file.flush()
+    except OSError:
+        pass
