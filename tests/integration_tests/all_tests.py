@@ -393,8 +393,6 @@ class FlameSocketIoTaskQueryTest(FlameFlowTestConfiguration):
             assert task, "Could not find WaitingParent"
             assert task.get('state') in INCOMPLETE_STATES, f"Task not in an incomplete stat: {task.get('state')}"
 
-        Path(log_dir, 'wait_file').touch()
-
         sio_client = socketio.Client()
         client_tasks_by_uuid = {}
 
@@ -405,6 +403,8 @@ class FlameSocketIoTaskQueryTest(FlameFlowTestConfiguration):
 
         sio_client.connect(flame_url)
         sio_client.emit('start-listen-task-query', data={'query_config': TEST_TASK_QUERY})
+
+        Path(log_dir, 'wait_file').touch()
 
         wait_until(_is_task_complete, 30, 1, client_tasks_by_uuid, 'WaitingParent')
         sio_client.disconnect()
