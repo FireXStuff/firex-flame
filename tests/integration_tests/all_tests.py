@@ -398,14 +398,12 @@ class FlameSocketIoTaskQueryTest(FlameFlowTestConfiguration):
 
         @sio_client.on('tasks-query-update')
         def _(update_by_uuid):
-            print(f'Received query update: {update_by_uuid}')
             client_tasks_by_uuid.update(deep_merge(client_tasks_by_uuid, update_by_uuid))
 
         sio_client.connect(flame_url)
         sio_client.emit('start-listen-task-query', data={'query_config': TEST_TASK_QUERY})
 
-        Path(log_dir, 'wait_file').touch()
-
+        Path(log_dir, 'wait_file').touch() # allow WaitingParent to continue
         wait_until(_is_task_complete, 30, 1, client_tasks_by_uuid, 'WaitingParent')
         sio_client.disconnect()
 
