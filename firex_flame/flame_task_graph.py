@@ -763,6 +763,7 @@ def select_from_task(select_paths, select_descendants, task: _FlameTask, task_gr
         select_descendants,
         task.get_uuid(),
         task_graph)
+
     if selected_descendants_by_uuid:
         selected_dict.update({'descendants': selected_descendants_by_uuid})
 

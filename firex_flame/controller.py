@@ -12,7 +12,7 @@ from gevent import spawn, sleep
 from gevent.queue import JoinableQueue
 
 from firex_flame.flame_helper import get_dict_json_md5, REVOKE_REASON_KEY, \
-    REVOKE_TIMESTAMP_KEY
+    REVOKE_TIMESTAMP_KEY, deep_merge
 from firexapp.submit.submit import ASYNC_SHUTDOWN_CELERY_EVENT_TYPE
 from firex_flame.flame_task_graph import FlameTaskGraph, FlameModelDumper
 
@@ -67,7 +67,7 @@ class _LoadedQueryConfig:
             changed_uuids,
             self.query_config,
         )
-        latest.update(updated_partial_query_result)
+        self.latest_full_query_result = deep_merge(latest, updated_partial_query_result)
 
         if (
             sio_server

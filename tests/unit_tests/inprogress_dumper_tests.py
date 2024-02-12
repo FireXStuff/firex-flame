@@ -166,3 +166,106 @@ class TaskQueryTests(unittest.TestCase):
             expected_task_repr[uuid1]['descendants'] = {'2': {'name': 'hello_child', 'uuid': '2'}}
             second_tasks_repr = json.loads(extra_repr_tasks.read_text())
             self.assertEqual(expected_task_repr, second_tasks_repr)
+
+    def test_partial_descedant_updates_ancestor(self):
+        #
+        # when a -> b -> c graph is updated, make sure when c changes,
+        # a's descendant query for it is updated properly.
+        #
+
+        with tempfile.TemporaryDirectory() as log_dir:
+            extra_repr = Path(log_dir, 'a-b-c-query.json')
+
+            model_file_name = "a-b-c-tasks.json"
+            extra_repr.write_text(
+                json.dumps(
+                    {
+                        "model_file_name": model_file_name,
+                        "task_queries": [
+                            {
+                                "matchCriteria": { "type": "always-select-fields"},
+                                "selectPaths": ["uuid", "name"]
+                            },
+                            {
+                                "matchCriteria": {
+                                    "type": "equals",
+                                    "value": {"name": "a"},
+                                },
+                                "selectPaths": ["flame_data"],
+                                "selectDescendants": [
+                                    {
+                                        "type": "equals",
+                                        "value": {"name": "b"}
+                                    },
+                                    {
+                                        "type": "equals",
+                                        "value": {"name": "c"}
+                                    },
+                                ],
+                            },
+                        ]
+                    }
+                ),
+                encoding='utf-8',
+            )
+
+            uuid1 = '1'
+            # the model dumper writes extra task representations periodically.
+            controller = FlameAppController(
+                {'logs_dir': log_dir},
+                extra_task_representations=[str(extra_repr)],
+                min_age_repr_dump=0, # disable dump age throttling.
+            )
+            controller.update_graph_and_sio_clients(
+                [
+                    {'uuid': uuid1, 'name': 'a', 'parent_id': None, 'type': 'task-started'},
+                    {'uuid': '2', 'name': 'b', 'parent_id': '1', 'type': 'task-started'},
+                    {'uuid': '3', 'name': 'c', 'parent_id': '2', 'type': 'task-started',
+                     'flame_data': {'1': 'a'}
+                    },
+                ],
+            )
+            controller.running_dumper_queue._queue.join()
+
+            latest_model = controller.query_config_registry._find_config(
+                model_file_name=model_file_name,
+                query_config=None,
+            ).latest_full_query_result
+
+            expected_query_result = {'1': {
+                'name': 'a', 'uuid': '1',
+                'descendants': {
+                    '2': {'name': 'b', 'uuid': '2'},
+                    '3': {
+                        'name': 'c',
+                        'uuid': '3',
+                        'flame_data': {'1': 'a'},
+                    }
+                }
+            }}
+
+            self.assertEqual(
+                latest_model,
+                expected_query_result,
+            )
+
+            controller.update_graph_and_sio_clients(
+                [
+                    {
+                        'uuid': '3', 'name': 'c', 'parent_id': '2', 'type': 'task-flame-data',
+                        'flame_data': {'2': 'b'}
+                    },
+                ],
+            )
+            controller.running_dumper_queue._queue.join()
+
+            latest_model = controller.query_config_registry._find_config(
+                model_file_name=model_file_name,
+                query_config=None,
+            ).latest_full_query_result
+
+            expected_query_result['1']['descendants']['3']['flame_data']['2'] = 'b'
+            self.assertEqual(
+                latest_model,
+                expected_query_result,
+            )
