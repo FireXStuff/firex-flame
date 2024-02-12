@@ -12,7 +12,7 @@ from gevent import spawn, sleep
 import paramiko
 
 from firex_flame.flame_helper import wait_until, REVOKE_REASON_KEY
-from firex_flame.event_aggregator import slim_tasks_by_uuid, INCOMPLETE_STATES, FlameEventAggregator
+from firex_flame.flame_task_graph import FlameTaskGraph, is_task_dict_complete
 from firex_flame.controller import FlameAppController
 
 logger = logging.getLogger(__name__)
@@ -28,11 +28,6 @@ def _run_metadata_to_api_model(run_metadata, root_uuid):
         'chain': run_metadata['chain'],
         'logs_server': run_metadata['logs_server'],
     }
-
-
-def _get_task_fields(tasks_by_uuid, fields):
-    return {uuid: {f: v for f, v in task.items() if f in fields}
-            for uuid, task in tasks_by_uuid.items()}
 
 
 def poll_channel_readable(channel, timeout=0):
@@ -190,31 +185,35 @@ def term_all_subprocs():
         term_subproc(sid)
 
 
-def create_socketio_task_api(
-    controller: FlameAppController,
-    event_aggregator,
-    run_metadata,
-):
+def create_socketio_task_api(controller: FlameAppController):
 
     @controller.sio_server.on('send-graph-state')
     def emit_frontend_tasks_by_uuid(sid, data=None):
         """ Send 'slim' fields for all tasks. This allows visualization of the graph."""
-        if data and 'task_queries' in data:
-            tasks_to_send = controller.query_full_tasks(data['task_queries'])
+        if (
+            isinstance(data, dict)
+            and {'task_queries', 'model_file_name'}.intersection(data.keys())
+        ):
+            tasks_to_send = controller.query_full_tasks(
+                data.get('task_queries'),
+                data.get('model_file_name'),
+            )
         else:
-            tasks_to_send = slim_tasks_by_uuid(event_aggregator.tasks_by_uuid)
+            tasks_to_send = controller.graph.get_slim_tasks_by_uuid()
         controller.sio_server.emit('graph-state', tasks_to_send, room=sid)
 
     @controller.sio_server.on('send-graph-fields')
     def emit_task_fields_by_uuid(sid, fields):
         """ Send the requested fields for all tasks."""
-        response = _get_task_fields(event_aggregator.tasks_by_uuid, fields)
+        response = controller.graph.get_all_tasks_fields(fields)
         controller.sio_server.emit('graph-fields', response, room=sid)
 
     @controller.sio_server.on('send-run-metadata')
     def emit_run_metadata(sid):
         """ Get static run-level data."""
-        response = _run_metadata_to_api_model(run_metadata, event_aggregator.root_uuid)
+        response = _run_metadata_to_api_model(
+            controller.run_metadata, controller.graph.root_uuid
+        )
         controller.sio_server.emit('run-metadata', response, room=sid)
 
     @controller.sio_server.on('send-task-details')
@@ -226,13 +225,13 @@ def create_socketio_task_api(
         """
         if isinstance(uuids, str):
             uuid = uuids
-            response = event_aggregator.tasks_by_uuid.get(uuid, None)
+            response = controller.graph.get_full_task_dict(uuid)
             controller.sio_server.emit('task-details-' + uuid, response, room=sid)
         else:
             if not isinstance(uuids, list):
                 response = []
             else:
-                response = [event_aggregator.tasks_by_uuid.get(u, None) for u in uuids]
+                response = [controller.graph.get_full_task_dict(u) for u in uuids]
             controller.sio_server.emit('task-details', response, room=sid)
 
     @controller.sio_server.on('start-listen-file')
@@ -251,35 +250,42 @@ def create_socketio_task_api(
 
     @controller.sio_server.on('start-listen-task-query')
     def start_listen_task_query(sid, args):
-        if 'query_config' not in args:
+        if not {'task_queries', 'model_file_name', 'query_config'}.intersection(args.keys()):
             logger.error("Received request to start listening to query without config.")
         else:
-            controller.add_client_task_query_config(sid, args['query_config'])
+            # keep legacy name temporarily for cutover.
+            task_queries = args.get('task_queries', args.get('query_config'))
+            controller.add_client_task_query_config(
+                sid,
+                task_queries,
+                args.get('model_file_name'),
+            )
 
     @controller.sio_server.on('disconnect')
     def disconnect(sid):
         controller.remove_client_task_query(sid)
 
 
-def create_rest_task_api(web_app, event_aggregator, run_metadata):
+def create_rest_task_api(
+    web_app,
+    task_graph: FlameTaskGraph,
+    run_metadata,
+):
 
     @web_app.route('/api/tasks')
     def get_all_tasks_by_uuid():
-        return jsonify(slim_tasks_by_uuid(event_aggregator.tasks_by_uuid))
+        return jsonify(task_graph.get_slim_tasks_by_uuid())
 
-    # TODO: add /api/tasks?uuids=uuid1,uuid2, or POST with request body containing query by uuid
     @web_app.route('/api/tasks/<uuid>')
     def get_task_details(uuid):
-        if uuid not in event_aggregator.tasks_by_uuid:
+        task = task_graph.get_full_task_dict(uuid)
+        if task is None:
             return '', 404
-        # if 'fields' in request['query']['fields']:
-        #     return jsonify( _get_task_fields(event_aggregator.tasks_by_uuid, request['query']['fields']))
-        # No fields were requested, so send all fields.
-        return jsonify(event_aggregator.tasks_by_uuid[uuid])
+        return jsonify(task)
 
     @web_app.route('/api/run-metadata')
     def get_run_metadata():
-        return jsonify(_run_metadata_to_api_model(run_metadata, event_aggregator.root_uuid))
+        return jsonify(_run_metadata_to_api_model(run_metadata, task_graph.root_uuid))
 
 
 def _data_from_environ_path(environ, path, default):
@@ -313,7 +319,6 @@ def create_revoke_api(
     web_app,
     celery_app,
     authed_user_request_path,
-    event_aggregator: FlameEventAggregator,
 ):
     assert controller.sio_server is not None
 
@@ -358,10 +363,11 @@ def create_revoke_api(
 
     @web_app.route('/api/revoke', methods=['GET', 'POST'])
     def rest_revoke_root_task():
-        if not event_aggregator.root_uuid:
+        root_uuid = controller.graph.root_uuid
+        if not root_uuid:
             return '', 500
-        logger.debug(f'Revoking entire run via root task UUID: {event_aggregator.root_uuid}')
-        return _rest_revoke_task(event_aggregator.root_uuid)
+        logger.debug(f'Revoking entire run via root task UUID: {root_uuid}')
+        return _rest_revoke_task(root_uuid)
 
     def _revoke_task(uuid, type, user, revoke_reason):
         msg = f"Received {type} request to revoke {uuid} from user {user}"
@@ -369,13 +375,13 @@ def create_revoke_api(
             msg += f' with reason: {revoke_reason}'
             revoke_reason = revoke_reason[:200] # trim since we'll store this.
         logger.info(msg)
-        if uuid not in event_aggregator.tasks_by_uuid:
+        task = controller.graph.get_slim_task_dict(uuid)
+        if task is None:
             return False
 
         prev_revoked_data = None
-        task = event_aggregator.tasks_by_uuid[uuid]
-        if task['state'] in INCOMPLETE_STATES:
-            run_revoked = event_aggregator.root_uuid == uuid
+        if not is_task_dict_complete(task):
+            run_revoked = controller.graph.root_uuid == uuid
             if run_revoked:
                 prev_revoked_data = controller.get_revoke_data()
                 controller.update_revoke_reason(revoke_reason)
@@ -387,8 +393,9 @@ def create_revoke_api(
         # Wait for the task to become revoked
         revoke_timeout = 10
 
-        revoked = wait_until(lambda: task.get('was_revoked'), timeout=revoke_timeout, sleep_for=1)
+        revoked = wait_until(controller.graph.was_revoked, timeout=revoke_timeout, sleep_for=1, uuid=uuid)
         if not revoked:
+            task = controller.graph.get_slim_task_dict(uuid)
             logger.warning(
                 f"Failed to revoke task: waited {revoke_timeout} sec and runstate is currently {task['state']}")
             if prev_revoked_data:

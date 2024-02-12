@@ -26,10 +26,10 @@ from firexkit.task import flame
 from firex_flame.flame_helper import get_flame_pid, wait_until_pid_not_exist, wait_until, \
     kill_flame, kill_and_wait, json_file_fn, wait_until_path_exist, deep_merge, wait_until_web_request_ok, \
     filter_paths, REVOKE_REASON_KEY
-from firex_flame.event_aggregator import INCOMPLETE_STATES, COMPLETE_STATES
+from firex_flame.flame_task_graph import INCOMPLETE_STATES, COMPLETE_STATES, is_task_dict_complete
 from firex_flame.model_dumper import get_tasks_slim_file, get_model_full_tasks_by_names, is_dump_complete, \
     get_run_metadata_file, get_flame_url, find_flame_model_dir, load_task_representation, load_slim_tasks, \
-    get_run_metadata, get_full_tasks_by_slim_pred
+    get_run_metadata, get_model_slim_tasks_by_names
 
 
 test_data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
@@ -65,8 +65,8 @@ def assert_all_match_some_prefix(strs, allowed_prefixes):
 
 def assert_flame_web_ok(flame_url, path):
     alive_url = urllib.parse.urljoin(flame_url, path)
-    alive_request = requests.get(alive_url)
-    assert alive_request.ok, 'Expected OK response when fetching %s resource page: %s' % (alive_url, path)
+    alive_request = requests.get(alive_url, timeout=10)
+    assert alive_request.ok, f'Expected OK response when fetching {alive_url} resource page: {path}'
 
 
 class FlameLaunchesTest(FlameFlowTestConfiguration):
@@ -191,7 +191,9 @@ def wait_until_model_task_name_exists(log_dir, task_name, timeout=20, sleep_for=
 
 def wait_until_model_task_uuid_complete_runstate(log_dir, timeout=20, sleep_for=1):
     return wait_until_complete_model_tasks_predicate(
-        lambda ts: all(t['state'] in COMPLETE_STATES for t in ts.values()), log_dir, timeout, sleep_for)
+        lambda ts: all(
+            is_task_dict_complete(t) for t in ts.values()),
+        log_dir, timeout, sleep_for)
 
 
 def read_json(file):
@@ -214,16 +216,15 @@ def wait_until_complete_model_tasks_predicate(tasks_pred, log_dir, timeout=20, s
     return wait_until(until_pred, timeout, sleep_for)
 
 
-def get_tasks_by_name(log_dir, name, expect_single=False):
-    tasks_with_name = list(get_full_tasks_by_slim_pred(
+def get_task_by_name(log_dir, name):
+    tasks_by_name = get_model_slim_tasks_by_names(
         log_dir,
-        lambda t: t.get('name') == name,
-    ).values())
-    if expect_single and tasks_with_name:
-        named_task_count = len(tasks_with_name)
-        assert named_task_count == 1, "Expecting single task with name '%s', but found %s" % (name, named_task_count)
-        return tasks_with_name[0]
-    return tasks_with_name
+        [name],
+    )
+    tasks_with_name = tasks_by_name[name]
+    named_task_count = len(tasks_with_name)
+    assert named_task_count == 1, f"Expecting single task with name '{name}', but found {named_task_count}"
+    return tasks_with_name[0]
 
 
 class FlameRevokeNonExistantUuidTest(FlameFlowTestConfiguration):
@@ -270,7 +271,7 @@ class FlameRevokeSuccessTest(FlameFlowTestConfiguration):
     def assert_on_flame_url(self, log_dir, flame_url):
         sleep_exists = wait_until_model_task_name_exists(log_dir, 'sleep')
         assert sleep_exists, "Sleep task doesn't exist in the flame rec file, something is wrong with run."
-        sleep_task = get_tasks_by_name(log_dir, 'sleep', expect_single=True)
+        sleep_task = get_task_by_name(log_dir, 'sleep')
         assert sleep_task['state'] in INCOMPLETE_STATES, \
             "Expected incomplete sleep, but found %s" % sleep_task['state']
 
@@ -295,7 +296,7 @@ class FlameRevokeSuccessTest(FlameFlowTestConfiguration):
                                                   % (SUCCESS_EVENT, resp['response'])
 
         # Need to re-parse task data, since now it should be revoked.
-        sleep_task_after_revoke = get_tasks_by_name(log_dir, 'sleep', expect_single=True)
+        sleep_task_after_revoke = get_task_by_name(log_dir, 'sleep')
         sleep_runstate = sleep_task_after_revoke['state']
         assert sleep_runstate == 'task-revoked', "Expected sleep runstate to be revoked, was %s" % sleep_runstate
 
@@ -322,7 +323,7 @@ class FlameRevokeRootRestSuccessTest(FlameFlowTestConfiguration):
             lambda ts: any(t['name'] == 'RootTask' and t.get('state') == 'task-revoked' for t in ts.values()),
             log_dir)
         if not root_revoked:
-            root_task_state = get_tasks_by_name(log_dir, 'RootTask', expect_single=True).get('state')
+            root_task_state = get_task_by_name(log_dir, 'RootTask').get('state')
             raise AssertionError(f"Root task not revoked after revoke request, run state: {root_task_state}")
 
 
@@ -401,7 +402,7 @@ class FlameSocketIoTaskQueryTest(FlameFlowTestConfiguration):
             client_tasks_by_uuid.update(deep_merge(client_tasks_by_uuid, update_by_uuid))
 
         sio_client.connect(flame_url)
-        sio_client.emit('start-listen-task-query', data={'query_config': TEST_TASK_QUERY})
+        sio_client.emit('start-listen-task-query', data={'task_queries': TEST_TASK_QUERY})
 
         Path(log_dir, 'wait_file').touch() # allow WaitingParent to continue
         wait_until(_is_task_complete, 30, 1, client_tasks_by_uuid, 'WaitingParent')
@@ -430,9 +431,11 @@ class FlameRedisKillCleanupTest(FlameFlowTestConfiguration):
 
         wait_until_model_task_uuid_complete_runstate(log_dir)
 
-        tasks = get_model_full_tasks_by_names(log_dir, ['RootTask', 'sleep'])
-        assert tasks['sleep'][0]['state'] == 'task-incomplete', "Expected sleep to be incomplete"
-        assert tasks['RootTask'][0]['state'] == 'task-incomplete', "Expected RootTask to be incomplete"
+        sleep_state = get_task_by_name(log_dir, 'sleep')['state']
+        assert sleep_state == 'task-incomplete', f"Expected sleep to be incomplete, was: {sleep_state}"
+
+        root_state = get_task_by_name(log_dir, 'RootTask')['state']
+        assert root_state == 'task-incomplete', f"Expected RootTask to be incomplete, was: {root_state}"
 
         flame_killed = wait_until_pid_not_exist(get_flame_pid(log_dir), timeout=4)
         assert not flame_killed, 'Flame killed after redis shutdown -- it should survive.'
@@ -459,7 +462,7 @@ class FlameTerminateOnCompleteTest(FlameFlowTestConfiguration):
         time.sleep(1)
         assert_flame_web_ok(flame_url, '/alive')
 
-        root_task = get_tasks_by_name(log_dir, 'RootTask', expect_single=True)
+        root_task = get_task_by_name(log_dir, 'RootTask')
         revoke_reason = 'this is the revoke reason'
         query = urllib.parse.urlencode({REVOKE_REASON_KEY: revoke_reason})
         try:
