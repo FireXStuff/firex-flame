@@ -170,10 +170,12 @@ def create_web_app(run_metadata, serve_logs_dir):
 
 def start_web_server(
     server_config: FlameServerConfig,
+    event_aggregator,
+    run_metadata,
     controller: FlameAppController,
     celery_app,
 ) -> pywsgi.WSGIServer:
-    web_app = create_web_app(controller.run_metadata, server_config.serve_logs_dir)
+    web_app = create_web_app(run_metadata, server_config.serve_logs_dir)
 
     controller.set_sio_server(
         # TODO: parametrize cors_allowed_origins.
@@ -181,8 +183,8 @@ def start_web_server(
     )
     sio_web_app = socketio.WSGIApp(controller.sio_server, web_app)
 
-    create_socketio_task_api(controller)
-    create_rest_task_api(web_app, controller.graph, controller.run_metadata)
+    create_socketio_task_api(controller, event_aggregator, run_metadata)
+    create_rest_task_api(web_app, event_aggregator, run_metadata)
 
     server = pywsgi.WSGIServer(
         ('', server_config.webapp_port),
@@ -203,6 +205,7 @@ def start_web_server(
             web_app,
             celery_app,
             server_config.authed_user_request_path,
+            event_aggregator,
         )
 
     return server
