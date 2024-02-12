@@ -250,12 +250,14 @@ def create_socketio_task_api(controller: FlameAppController):
 
     @controller.sio_server.on('start-listen-task-query')
     def start_listen_task_query(sid, args):
-        if not {'task_queries', 'model_file_name'}.intersection(args.keys()):
+        if not {'task_queries', 'model_file_name', 'query_config'}.intersection(args.keys()):
             logger.error("Received request to start listening to query without config.")
         else:
+            # keep legacy name temporarily for cutover.
+            task_queries = args.get('task_queries', args.get('query_config'))
             controller.add_client_task_query_config(
                 sid,
-                args.get('task_queries'),
+                task_queries,
                 args.get('model_file_name'),
             )
 
