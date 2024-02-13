@@ -191,12 +191,25 @@ class TaskQueryTests(unittest.TestCase):
                                     "type": "equals",
                                     "value": {"name": "a"},
                                 },
-                                "selectPaths": ["flame_data", "firex_bound_args"],
+                                "selectPaths": ["flame_data"],
                                 "selectDescendants": [
                                     {
                                         "type": "equals",
                                         "value": {"name": "b"}
                                     },
+                                    {
+                                        "type": "equals",
+                                        "value": {"name": "c"}
+                                    },
+                                ],
+                            },
+                            {
+                                "matchCriteria": {
+                                    "type": "equals",
+                                    "value": {"name": "a"},
+                                },
+                                "selectPaths": ["firex_bound_args"],
+                                "selectDescendants": [
                                     {
                                         "type": "equals",
                                         "value": {"name": "c"}

@@ -787,6 +787,8 @@ def _select_ancestors_of_task_descendant_match(
 ):
     # Should the current task be included in the result because it matches some descendant criteria?
     ancestor_results_by_uuid = {}
+
+    # find query matched by desc so only possibly affected ancestors will be re-queried.
     desc_matching_queries = [
         task_query for task_query in all_task_queries
         if any(
@@ -797,28 +799,32 @@ def _select_ancestors_of_task_descendant_match(
         # The current task matches some descendant criteria. Find all ancestors that match top-level criteria
         # and return those ancestors.
         always_select_fields = get_always_select_fields(all_task_queries)
-        for query in desc_matching_queries:
-            for ancestor_task in task_graph.get_ancestors_of_uuid(desc_task.get_uuid()):
-                if task_matches_criteria(ancestor_task, query['matchCriteria']):
-                    select_paths = always_select_fields + query.get('selectPaths', [])
-                    ancestor_results_by_uuid[ancestor_task.get_uuid()] = select_from_task(
-                        select_paths,
-                        query.get('selectDescendants', []),
-                        ancestor_task,
-                        task_graph,
-                    )
+        for ancestor_task in task_graph.get_ancestors_of_uuid(desc_task.get_uuid()):
+            ancestor_query_result = _query_task(
+                ancestor_task,
+                desc_matching_queries,
+                task_graph,
+                always_select_fields=always_select_fields
+            )
+            if ancestor_query_result is not None:
+                ancestor_results_by_uuid[ancestor_task.get_uuid()] = ancestor_query_result
 
     return ancestor_results_by_uuid
 
 
-def _query_task(task: _FlameTask, all_task_queries, task_graph: FlameTaskGraph):
+def _query_task(
+    task: _FlameTask,
+    all_task_queries,
+    task_graph: FlameTaskGraph,
+    always_select_fields=None
+):
     matching_queries = [
         query for query in all_task_queries
         if task_matches_criteria(task, query['matchCriteria'])
     ]
     if matching_queries:
-        always_select_fields = get_always_select_fields(all_task_queries)
-        select_paths = always_select_fields +  flatten([q.get('selectPaths', []) for q in matching_queries])
+        always_select_fields = always_select_fields or get_always_select_fields(all_task_queries)
+        select_paths = always_select_fields + flatten([q.get('selectPaths', []) for q in matching_queries])
         all_select_descendants = flatten([q.get('selectDescendants', []) for q in matching_queries])
         return select_from_task(
             select_paths,
