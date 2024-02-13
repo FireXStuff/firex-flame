@@ -191,7 +191,7 @@ class TaskQueryTests(unittest.TestCase):
                                     "type": "equals",
                                     "value": {"name": "a"},
                                 },
-                                "selectPaths": ["flame_data"],
+                                "selectPaths": ["flame_data", "firex_bound_args"],
                                 "selectDescendants": [
                                     {
                                         "type": "equals",
@@ -221,7 +221,8 @@ class TaskQueryTests(unittest.TestCase):
                     {'uuid': uuid1, 'name': 'a', 'parent_id': None, 'type': 'task-started'},
                     {'uuid': '2', 'name': 'b', 'parent_id': '1', 'type': 'task-started'},
                     {'uuid': '3', 'name': 'c', 'parent_id': '2', 'type': 'task-started',
-                     'flame_data': {'1': 'a'}
+                     'flame_data': {'1': 'a'},
+                     'firex_bound_args': ['arg']
                     },
                 ],
             )
@@ -240,6 +241,7 @@ class TaskQueryTests(unittest.TestCase):
                         'name': 'c',
                         'uuid': '3',
                         'flame_data': {'1': 'a'},
+                        'firex_bound_args': ['arg'],
                     }
                 }
             }}

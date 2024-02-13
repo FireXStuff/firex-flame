@@ -752,7 +752,12 @@ def _get_descendants_for_criteria(select_paths, descendant_criteria, ancestor_uu
     return matched_descendants_by_uuid
 
 
-def select_from_task(select_paths, select_descendants, task: _FlameTask, task_graph: FlameTaskGraph):
+def select_from_task(
+    select_paths,
+    select_descendants,
+    task: _FlameTask,
+    task_graph: FlameTaskGraph,
+):
     selected_dict = {}
     # FIXME: get_full_task_dict may load here even when the paths don't need it to!
     paths_update_dict = _jsonpath_get_paths(select_paths, task.get_full_task_dict())
@@ -775,45 +780,72 @@ def get_always_select_fields(task_queries):
                     if q['matchCriteria']['type'] == 'always-select-fields'])
 
 
-def _select_ancestor_of_task_descendant_match(uuid, query, select_paths, task_graph: FlameTaskGraph):
+def _select_ancestors_of_task_descendant_match(
+    desc_task: _FlameTask,
+    all_task_queries,
+    task_graph: FlameTaskGraph,
+):
     # Should the current task be included in the result because it matches some descendant criteria?
-    task = task_graph._get_task(uuid)
-    matching_criteria = [criteria for criteria in query.get('selectDescendants', [])
-                         if task_matches_criteria(task, criteria)]
-    if matching_criteria:
-        # The current task matches some descendant criteria. Confirm that some ancestor matches the top-level
-        # criteria.
-        ancestor = next((a for a in task_graph.get_ancestors_of_uuid(uuid)
-                         if task_matches_criteria(a, query['matchCriteria'])), None)
-        if ancestor:
-            # The current task and its ancestor should be included in the result.
-            return ancestor.get_uuid(), select_from_task(select_paths, matching_criteria, ancestor, task_graph)
-    return None, {}
+    ancestor_results_by_uuid = {}
+    desc_matching_queries = [
+        task_query for task_query in all_task_queries
+        if any(
+            task_matches_criteria(desc_task, desc_query)
+            for desc_query in task_query.get('selectDescendants', []))
+    ]
+    if desc_matching_queries:
+        # The current task matches some descendant criteria. Find all ancestors that match top-level criteria
+        # and return those ancestors.
+        always_select_fields = get_always_select_fields(all_task_queries)
+        for query in desc_matching_queries:
+            for ancestor_task in task_graph.get_ancestors_of_uuid(desc_task.get_uuid()):
+                if task_matches_criteria(ancestor_task, query['matchCriteria']):
+                    select_paths = always_select_fields + query.get('selectPaths', [])
+                    ancestor_results_by_uuid[ancestor_task.get_uuid()] = select_from_task(
+                        select_paths,
+                        query.get('selectDescendants', []),
+                        ancestor_task,
+                        task_graph,
+                    )
+
+    return ancestor_results_by_uuid
+
+
+def _query_task(task: _FlameTask, all_task_queries, task_graph: FlameTaskGraph):
+    matching_queries = [
+        query for query in all_task_queries
+        if task_matches_criteria(task, query['matchCriteria'])
+    ]
+    if matching_queries:
+        always_select_fields = get_always_select_fields(all_task_queries)
+        select_paths = always_select_fields +  flatten([q.get('selectPaths', []) for q in matching_queries])
+        all_select_descendants = flatten([q.get('selectDescendants', []) for q in matching_queries])
+        return select_from_task(
+            select_paths,
+            all_select_descendants,
+            task,
+            task_graph,
+        )
+    return None
 
 
 def _select_data_for_matches(task_uuid, task_queries, task_graph: FlameTaskGraph, match_descendant_criteria):
     result_tasks_by_uuid = {}
     task = task_graph._get_task(task_uuid)
     if task is not None:
-        always_select_fields = get_always_select_fields(task_queries)
-        for query in task_queries:
-            matches_criteria = task_matches_criteria(task, query['matchCriteria'])
-            select_paths = always_select_fields + query.get('selectPaths', [])
-            updates_by_uuid = {}
-            if matches_criteria:
-                updates_by_uuid[task_uuid] = select_from_task(
-                    select_paths,
-                    query.get('selectDescendants', []),
-                    task,
-                    task_graph)
+        query_result = _query_task(task, task_queries, task_graph)
+        if query_result is not None:
+            result_tasks_by_uuid[task_uuid] = query_result
 
-            if match_descendant_criteria:
-                uuid, task_update = _select_ancestor_of_task_descendant_match(task_uuid, query, select_paths, task_graph)
-                if uuid:
-                    updates_by_uuid[uuid] = task_update
-
-            if updates_by_uuid:
-                result_tasks_by_uuid = deep_merge(result_tasks_by_uuid, updates_by_uuid)
+        if match_descendant_criteria:
+            # For incremental updates, find all ancestors with descedant queries that match
+            # "task" and query their results too.
+            ancestors_by_uuid = _select_ancestors_of_task_descendant_match(
+                task,
+                task_queries,
+                task_graph,
+            )
+            result_tasks_by_uuid.update(ancestors_by_uuid)
 
     return result_tasks_by_uuid
 
@@ -825,7 +857,9 @@ def _query_flame_tasks(task_graph: FlameTaskGraph, task_uuids_to_query, task_que
     result_tasks_by_uuid = {}
     for uuid in task_uuids_to_query:
         selected_tasks_by_uuid = _select_data_for_matches(uuid, task_queries, task_graph, match_descendant_criteria)
-        result_tasks_by_uuid = deep_merge(result_tasks_by_uuid, selected_tasks_by_uuid)
+        # Every query result is a full task query, no need for merging. Could de-dupe by senidng "already seen"
+        # task uuids to avoid re-querying.
+        result_tasks_by_uuid.update(selected_tasks_by_uuid)
 
     return result_tasks_by_uuid
 

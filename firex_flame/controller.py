@@ -67,7 +67,7 @@ class _LoadedQueryConfig:
             changed_uuids,
             self.query_config,
         )
-        self.latest_full_query_result = deep_merge(latest, updated_partial_query_result)
+        latest.update(updated_partial_query_result)
 
         if (
             sio_server
@@ -261,13 +261,13 @@ class FlameAppController:
                 min_age_change=self.min_age_repr_dump,
             )
 
-    def dump_extra_task_representations(self) -> None:
+    def dump_extra_task_representations(self, force_recalc=True) -> None:
         self.initialize_task_query_registry()
 
         for query_config in self.query_config_registry.loaded_query_configs:
             # forcing a full re-calc (includin loading any task that might influence the representation)
             # is is likely overkill, but it makes sure there aren't incremental accumulation errors.
-            self._dump_task_query_config_results(query_config, force_recalc=True)
+            self._dump_task_query_config_results(query_config, force_recalc=force_recalc)
 
     def dump_full_task(self, uuid, new_event_types):
         self.graph.dump_full_task(uuid, new_event_types)
