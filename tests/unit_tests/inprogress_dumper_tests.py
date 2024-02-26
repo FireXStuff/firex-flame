@@ -233,9 +233,13 @@ class TaskQueryTests(unittest.TestCase):
                 [
                     {'uuid': uuid1, 'name': 'a', 'parent_id': None, 'type': 'task-started'},
                     {'uuid': '2', 'name': 'b', 'parent_id': '1', 'type': 'task-started'},
-                    {'uuid': '3', 'name': 'c', 'parent_id': '2', 'type': 'task-started',
-                     'flame_data': {'1': 'a'},
-                     'firex_bound_args': ['arg']
+                    {
+                        'uuid': '3',
+                        'name': 'c',
+                        'parent_id': '2',
+                        'type': 'task-started',
+                        'flame_data': {'1': 'a'},
+                        'firex_bound_args': ['arg'],
                     },
                 ],
             )

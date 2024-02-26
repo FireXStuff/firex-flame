@@ -326,7 +326,7 @@ class FlameAppController:
         return self.graph.all_tasks_complete()
 
     def finalize_all_tasks(self):
-        " Mark any incomplete tasks as fake-termainl incomplete state, update clients and dump all task data models."
+        " Mark any incomplete tasks as fake-terminal incomplete state, update clients and dump all task data models."
 
         _, slim_update_data_by_uuid = self.graph.set_and_dump_any_incomplete_tasks()
         self._update_slim_listening_sio_clients(slim_update_data_by_uuid)

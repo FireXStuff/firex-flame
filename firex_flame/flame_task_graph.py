@@ -211,15 +211,16 @@ class _ModelledFlameTask:
 
     def as_dict(self):
         return {
-            k: v
-            for k, v in dataclasses.asdict(self).items()
-            if not isinstance(v, _TaskFieldSentile)
+            field_name: getattr(self, field_name)
+            for field_name in self.unloadable_field_names()
+            if not isinstance(getattr(self, field_name), _TaskFieldSentile)
         }
 
     def get_set_field_names(self):
         return [
             field_name for field_name in self.unloadable_field_names()
-            if getattr(self, field_name) != _TaskFieldSentile.UNSET]
+            if getattr(self, field_name) != _TaskFieldSentile.UNSET
+        ]
 
     def unloadable_field_names(self):
         return [f.name for f in dataclasses.fields(self)]

@@ -8,7 +8,8 @@ from firex_flame.flame_task_graph import TASK_ARGS
 from firex_flame.flame_helper import find_rec_file, find
 from firex_flame.controller import FlameAppController
 
-def process_recording_file(flame_controller: FlameAppController, recording_file: str):
+
+def load_events_from_rec_file(recording_file):
     assert os.path.isfile(recording_file), f"Recording file doesn't exist: {recording_file}"
 
     real_rec = os.path.realpath(recording_file)
@@ -19,10 +20,20 @@ def process_recording_file(flame_controller: FlameAppController, recording_file:
         with open(recording_file) as rec:
             event_lines = rec.readlines()
 
+    event_count = 0
     for event_line in event_lines:
         if event_line:
-            event = json.loads(event_line)
-            flame_controller.update_graph_and_sio_clients([event])
+            event =  json.loads(event_line)
+            yield event
+            event_count += 1
+            if event_count % 100 == 0:
+                print(f"Processed event {event_count} with uuid {event.get('uuid')}")
+
+
+def process_recording_file(flame_controller: FlameAppController, recording_file: str):
+
+    for event in load_events_from_rec_file(recording_file):
+        flame_controller.update_graph_and_sio_clients([event])
 
     if flame_controller.is_root_complete():
         # Kludge incomplete runstates that will never become terminal.
