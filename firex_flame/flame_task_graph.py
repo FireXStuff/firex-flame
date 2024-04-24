@@ -11,6 +11,8 @@ from pathlib import Path
 from enum import Enum
 import json
 import time
+import shutil
+import subprocess
 
 from firexkit.task import FIREX_REVOKE_COMPLETE_EVENT_TYPE
 from firexapp.events.model import ADDITIONAL_CHILDREN_KEY, EXTERNAL_COMMANDS_KEY
@@ -232,11 +234,6 @@ class _ModelledFlameTask:
             getattr(self, f) == _TaskFieldSentile.UNLOADED
             for f in field_names
         )
-
-    def maybe_set_unloaded_values(self, other: dict):
-        for update_key, update_value in other.items():
-            if self.any_unloaded([update_key]):
-                setattr(self, update_key, update_value)
 
     def unload_fields(self):
         for field_name in self.unloadable_field_names():
@@ -1047,6 +1044,7 @@ class FlameModelDumper:
             # Write one JSON file per task.
             for uuid, task in task_graph.get_full_tasks_by_uuid().items():
                 self.dump_full_task(uuid, task)
+            logger.info("Completed dumping Flame tasks.")
 
         paths_to_compress = [self.slim_tasks_file, self.full_tasks_dir]
         if run_metadata:
@@ -1059,12 +1057,8 @@ class FlameModelDumper:
             metadata_model_file = self.dump_metadata(run_metadata_with_root, root_complete, flame_complete=True)
             paths_to_compress.append(metadata_model_file)
 
-        # TODO: use shutil.which to find out of there is a native tar command, and use that when present to speedup
-        #  shutdown.
         # Write a tar.gz file containing all the files dumped above.
-        with tarfile.open(os.path.join(self.root_model_dir, 'full-run-state.tar.gz'), "w:gz") as tar:
-            for path in paths_to_compress:
-                tar.add(path, arcname=os.path.basename(path))
+        _dump_full_task_state_archive(self.root_model_dir, paths_to_compress)
 
         Path(get_model_complete_file(root_model_dir=self.root_model_dir)).touch()
         logger.info("Finished dumping complete Flame model.")
@@ -1078,7 +1072,6 @@ class FlameModelDumper:
     ):
 
         out_file = os.path.join(self.root_model_dir, model_file_name)
-
 
         try:
             should_write = (
@@ -1094,3 +1087,28 @@ class FlameModelDumper:
             # Don't interfere with shutdown even if extra representation dumping fails.
             logger.error(f"Failed to dump representation of {model_file_name}.")
             logger.exception(ex)
+
+
+def _dump_full_task_state_archive(
+    root_model_dir,
+    paths_to_compress
+):
+    logger.info("Starting to create full task state archive.")
+    full_state_gz_basename = 'full-run-state.tar.gz'
+    tar_bin = shutil.which('tar')
+    if tar_bin:
+        rel_paths_to_compress = [os.path.relpath(p, root_model_dir) for p in paths_to_compress]
+        try:
+            subprocess.run(
+                [tar_bin, 'czf', full_state_gz_basename] + rel_paths_to_compress,
+                cwd=root_model_dir,
+                timeout=5*60,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            pass
+    else:
+        with tarfile.open(os.path.join(root_model_dir, full_state_gz_basename), "w:gz") as tar:
+            for path in paths_to_compress:
+                tar.add(path, arcname=os.path.basename(path))
+    logger.info("Completed creating full task state archive.")
