@@ -363,10 +363,17 @@ def create_revoke_api(
 
     @web_app.route('/api/revoke', methods=['GET', 'POST'])
     def rest_revoke_root_task():
-        root_uuid = controller.graph.root_uuid
+        # a revoke run quickly after submission
+        # might be received before the root task is known,
+        # so wait a brief amount of time.
+        root_uuid = wait_until(
+            lambda: controller.graph.root_uuid,
+            timeout=5,
+            sleep_for=0.1,
+        )
+        logger.debug(f'Revoking entire run via root task UUID: {root_uuid}')
         if not root_uuid:
             return '', 500
-        logger.debug(f'Revoking entire run via root task UUID: {root_uuid}')
         return _rest_revoke_task(root_uuid)
 
     def _revoke_task(uuid, type, user, revoke_reason):
