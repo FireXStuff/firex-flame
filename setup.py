@@ -40,8 +40,8 @@ setup(name='firex_flame',
 
             "zope.interface==6.3",
             "zipp==3.18.1",
-            # "bcrypt==4.1.2",
-            # "cryptography==42.0.5",
+            "bcrypt==4.1.2",
+            "cryptography==42.0.5",
             "rapidfuzz==3.8.1",
       ],
       package_data={
