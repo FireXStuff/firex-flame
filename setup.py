@@ -34,6 +34,9 @@ setup(name='firex_flame',
             "gevent",
             "importlib-resources",
             "jsonpath-ng",
+
+            # pin to debug seg fail in Open Source CI.
+            "setuptools==69.5.1",
       ],
       package_data={
         'firex_flame': ['templates/*.html'],
