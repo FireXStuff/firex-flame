@@ -36,12 +36,14 @@ setup(name='firex_flame',
             "jsonpath-ng",
 
             # pin to debug seg fail in Open Source CI.
-            "setuptools==69.5.1",
-            "zope.interface==6.3",
-            "zipp==3.18.1",
+            # "setuptools==69.5.1",
+
+
+            # "zope.interface==6.3",
+            # "zipp==3.18.1",
             "bcrypt==4.1.2",
             "cryptography==42.0.5",
-            "rapidfuzz==3.8.1",
+            # "rapidfuzz==3.8.1",
       ],
       package_data={
         'firex_flame': ['templates/*.html'],
