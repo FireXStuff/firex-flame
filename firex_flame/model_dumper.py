@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 from gevent.fileobject import FileObject
 
-from firex_flame.flame_helper import get_flame_debug_dir
+from firex_flame.flame_helper import get_flame_debug_dir, REVOKE_TIMESTAMP_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,14 @@ def get_run_metadata(firex_logs_dir=None, root_model_dir=None):
     if os.path.isfile(run_metadata_file):
         return json.loads(Path(run_metadata_file).read_text())
     return None
+
+def is_run_revoked(firex_logs_dir) -> bool:
+    try:
+        return bool(
+            get_run_metadata(firex_logs_dir).get(REVOKE_TIMESTAMP_KEY)
+        )
+    except Exception:
+        return False
 
 
 def get_flame_url(firex_logs_dir=None, root_model_dir=None):
