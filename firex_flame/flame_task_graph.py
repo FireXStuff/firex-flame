@@ -186,9 +186,8 @@ AGGREGATE_NO_OVERWRITE_FIELDS = AGGREGATE_MERGE_FIELDS + AGGREGATE_KEEP_INITIAL_
 
 FIELD_TO_CELERY_TRANSFORMS = {k: v['transform_celery'] for k, v in FIELD_CONFIG.items() if 'transform_celery' in v}
 
-TASK_RECEIVED_TYPE = 'task-received'
 STATE_TYPES = {
-    TASK_RECEIVED_TYPE: {'terminal': False},
+    'task-received': {'terminal': False},
     'task-started': {'terminal': False},
     'task-blocked': {'terminal': False},
     'task-unblocked': {'terminal': False},
@@ -451,21 +450,17 @@ class FlameTaskGraph:
         self._child_to_parents_uuids[child_uuid].add(parent_uuid)
 
     def _maybe_set_root_uuid(self, events):
-        if self.root_uuid is None:
-            for event in events:
-                # revoking a not started, received root UUID doesn't seem
-                # to work (the task keeps running), so wait for a later
-                # event type before setting the root UUID.
-                if event.get('type') not in [None, TASK_RECEIVED_TYPE]:
-                    if (
-                        event.get('parent_id', '__no_match') is None
-                        and event.get('uuid')
-                    ):
-                        self.root_uuid = event['uuid']
-                    elif event.get('root_id') is not None:
-                        # we can still know the root if we miss the first event (the root's event with parent_id)
-                        # since other events reference the root UUID via root_id.
-                        self.root_uuid = event['root_id']
+        for event in events:
+            if self.root_uuid is None:
+                if (
+                    event.get('parent_id', '__no_match') is None
+                    and event.get('uuid')
+                ):
+                    self.root_uuid = event['uuid']
+                elif event.get('root_id') is not None:
+                    # we can still know the root if we miss the first event (the root's event with parent_id)
+                    # since other events reference the root UUID via root_id.
+                    self.root_uuid = event['root_id']
 
     def _update_graph_from_task_data(self, event):
         event_uuid = event.get('uuid')
