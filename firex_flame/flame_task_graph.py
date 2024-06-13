@@ -186,8 +186,9 @@ AGGREGATE_NO_OVERWRITE_FIELDS = AGGREGATE_MERGE_FIELDS + AGGREGATE_KEEP_INITIAL_
 
 FIELD_TO_CELERY_TRANSFORMS = {k: v['transform_celery'] for k, v in FIELD_CONFIG.items() if 'transform_celery' in v}
 
+RECEIVED_EVENT_TYPE = 'task-received'
 STATE_TYPES = {
-    'task-received': {'terminal': False},
+    RECEIVED_EVENT_TYPE: {'terminal': False},
     'task-started': {'terminal': False},
     'task-blocked': {'terminal': False},
     'task-unblocked': {'terminal': False},
@@ -345,7 +346,7 @@ class _FlameTask:
                         if task_num % 100 == 0:
                             logger.debug(f'Unloaded big fields for task num {task_num}, uuid {self.get_uuid()}')
 
-    def _get_task_state(self):
+    def get_task_state(self):
         return self.always_loaded_task_data['state']
 
     def is_complete(self) -> bool:
@@ -505,6 +506,12 @@ class FlameTaskGraph:
             self.get_all_task_uuids(),
             task_queries,
             match_descendant_criteria=False)
+
+    def is_root_started(self) -> bool:
+        task = self._tasks_by_uuid.get(self.root_uuid)
+        if task is None:
+            return False
+        return task.get_task_state() not in [None, RECEIVED_EVENT_TYPE]
 
     def is_root_complete(self) -> bool:
         task = self._tasks_by_uuid.get(self.root_uuid)

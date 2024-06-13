@@ -367,10 +367,11 @@ def create_revoke_api(
         # might be received before the root task is known,
         # so wait a brief amount of time.
         root_uuid = wait_until(
-            lambda: controller.graph.root_uuid,
+            controller.graph.is_root_started,
             timeout=20, # startup can be slow.
             sleep_for=0.1,
         )
+        root_uuid = controller.graph.root_uuid
         logger.debug(f'Revoking entire run via root task UUID: {root_uuid}')
         if not root_uuid:
             return '', 500
