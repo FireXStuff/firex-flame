@@ -34,7 +34,7 @@ setup(name='firex_flame',
             "gevent",
             "importlib-resources",
             "jsonpath-ng",
-            "certifi==2024.2.2",
+            "cryptography==42.0.7",
       ],
       package_data={
         'firex_flame': ['templates/*.html'],
