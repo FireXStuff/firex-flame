@@ -34,6 +34,10 @@ setup(name='firex_flame',
             "gevent",
             "importlib-resources",
             "jsonpath-ng",
+
+            "zipp==3.1.0",
+            "requests==2.32.2",
+            "redis==5.0.4",
       ],
       package_data={
         'firex_flame': ['templates/*.html'],
