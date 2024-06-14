@@ -271,17 +271,19 @@ class TaskQueryTests(unittest.TestCase):
             controller.update_graph_and_sio_clients(
                 [
                     {
-                        'uuid': '3', 'name': 'c', 'parent_id': '2', 'type': 'task-flame-data',
-                        'flame_data': {'2': 'b'}
+                        'uuid': '3', 'name': 'c', 'parent_id': '2',
+                        'type': 'task-flame-data',
+                        'flame_data': {'2': 'b'},
                     },
                 ],
             )
             controller.running_dumper_queue._queue.join()
 
-            latest_model = controller.query_config_registry._find_config(
+            latest_model = controller.query_full_tasks(
                 model_file_name=model_file_name,
-                query_config=None,
-            ).latest_full_query_result
+                task_queries=None,
+                force=True,
+            )
 
             expected_query_result['1']['descendants']['3']['flame_data']['2'] = 'b'
             self.assertEqual(

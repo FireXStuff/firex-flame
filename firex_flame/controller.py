@@ -148,7 +148,7 @@ class _QueryConfigRegistry:
                 changed_result_configs.append(query_config)
         return changed_result_configs
 
-    def query_full_tasks(self, task_queries, task_graph: FlameTaskGraph, model_file_name):
+    def query_full_tasks(self, task_queries, task_graph: FlameTaskGraph, model_file_name, force=False):
         config = self._find_config(task_queries, model_file_name)
         if not config:
             config = _LoadedQueryConfig.create_query_config(task_queries, model_file_name)
@@ -312,11 +312,12 @@ class FlameAppController:
     def set_sio_server(self, sio_server: 'socketio.Server'):
         self.sio_server = sio_server
 
-    def query_full_tasks(self, task_queries, model_file_name):
+    def query_full_tasks(self, task_queries, model_file_name, force=False):
         return self.query_config_registry.query_full_tasks(
             task_queries,
             self.graph,
             model_file_name,
+            force=force,
         )
 
     def is_root_complete(self):
