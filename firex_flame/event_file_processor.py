@@ -53,7 +53,7 @@ def get_tasks_from_rec_file(log_dir=None, rec_filepath=None, mark_incomplete=Fal
     else:
         rec_file = rec_filepath
     assert os.path.exists(rec_file), f"Recording file not found: {rec_file}"
-    flame_controller = FlameAppController({})
+    flame_controller = FlameAppController({'logs_dir': log_dir})
     process_recording_file(flame_controller, rec_file)
 
     if mark_incomplete:
@@ -78,9 +78,8 @@ def get_model_or_rec_full_tasks_by_uuids(logs_dir, uuids):
     if os.path.isdir(find_flame_model_dir(logs_dir)):
         return get_full_tasks_by_slim_pred(logs_dir, lambda st: st['uuid'] in uuids)
 
-    rec_file = find_rec_file(logs_dir)
-    if os.path.isfile(rec_file):
-        tasks_by_uuid, _ = get_tasks_from_rec_file(rec_filepath=rec_file)
+    if os.path.isdir(logs_dir):
+        tasks_by_uuid, _ = get_tasks_from_rec_file(log_dir=logs_dir)
         return {u: t for u, t in tasks_by_uuid.items() if u in uuids}
 
     raise Exception("Found neither model directory or rec_file, no source of task data in: %s" % logs_dir)

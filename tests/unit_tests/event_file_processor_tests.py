@@ -17,7 +17,7 @@ class EventFileProcessorTests(unittest.TestCase):
 
         recording_file = os.path.join(test_data_dir, 'nop', 'firex_internal', 'flame', 'flame.rec')
 
-        controller = FlameAppController({})
+        controller = FlameAppController({'logs_dir': test_data_dir})
         process_recording_file(controller, recording_file)
 
         self.assertEqual(2, len(controller.graph.get_full_tasks_by_uuid()), "Expected two tasks, root and nop.")

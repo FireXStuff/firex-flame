@@ -1096,6 +1096,24 @@ class FlameModelDumper:
             logger.exception(ex)
 
 
+class NoWritngModelDumper(FlameModelDumper):
+
+    def __init__(self, firex_logs_dir):
+        super().__init__(firex_logs_dir)
+
+    def dump_full_task(self, *args, **kwargs):
+        pass
+
+    def dump_slim_tasks(self, *args, **kwargs):
+        pass
+
+    def dump_complete_data_model(self, *args, **kwargs):
+        pass
+
+    def dump_task_representation(self, *args, **kwargs):
+        pass
+
+
 def _dump_full_task_state_archive(
     root_model_dir,
     paths_to_compress

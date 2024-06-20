@@ -12,30 +12,12 @@ from gevent import spawn, sleep
 from gevent.queue import JoinableQueue
 
 from firex_flame.flame_helper import get_dict_json_md5, REVOKE_REASON_KEY, \
-    REVOKE_TIMESTAMP_KEY, deep_merge
+    REVOKE_TIMESTAMP_KEY
 from firexapp.submit.submit import ASYNC_SHUTDOWN_CELERY_EVENT_TYPE
-from firex_flame.flame_task_graph import FlameTaskGraph, FlameModelDumper
+from firex_flame.flame_task_graph import FlameTaskGraph, FlameModelDumper, NoWritngModelDumper
 
 
 logger = logging.getLogger(__name__)
-
-
-class _NoOpDumper:
-
-    def dump_metadata(self, *_, **__):
-        pass
-
-    def dump_complete_data_model(self, *_, **__):
-        pass
-
-    def dump_full_task(self, *_, **__):
-        pass
-
-    def dump_slim_tasks(self, *_, **__) -> None:
-        pass
-
-    def load_full_task(self, *_, **__) -> dict:
-        return {}
 
 
 @dataclass
@@ -168,10 +150,10 @@ class FlameAppController:
         self.run_metadata = run_metadata
         self.min_age_repr_dump = min_age_repr_dump
 
-        if dump_model and 'logs_dir' in self.run_metadata:
+        if dump_model:
             self.model_dumper = FlameModelDumper(firex_logs_dir=self.run_metadata['logs_dir'])
         else:
-            self.model_dumper = _NoOpDumper()
+            self.model_dumper = NoWritngModelDumper(self.run_metadata.get('logs_dir'))
 
         self.graph : FlameTaskGraph = FlameTaskGraph(model_dumper=self.model_dumper)
 
