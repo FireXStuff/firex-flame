@@ -623,6 +623,49 @@ def _normalize_criteria_key(k):
     return k[1:] if k.startswith('?') else k
 
 
+def _matches_equal_criteria(task: _FlameTask, eq_criteria: dict[str, Any]):
+    # TODO: if more adjusting qualifiers are added, this needs to be reworked.
+    required_keys = {k for k in eq_criteria.keys() if not k.startswith('?')}
+    optional_keys = {_normalize_criteria_key(k) for k in eq_criteria.keys() if k.startswith('?')}
+
+    task_fields = task.get_field_names()
+    if not required_keys.issubset(task_fields):
+        return False # task is missing required keys, can't match.
+
+    queried_field_names = required_keys.union(optional_keys)
+    normalized_criteria = {_normalize_criteria_key(k): v for k, v in eq_criteria.items()}
+    for task_field in task_fields: # ordered to avoid loading unloadable fields
+        if (
+            task_field in queried_field_names
+            and task.get_field(task_field) != normalized_criteria[task_field]
+        ):
+            return False
+    return True
+
+def _matches_has_key_criteria(task: _FlameTask, key_path):
+    if isinstance(key_path, str):
+        key_path = key_path.split('.')
+
+    if key_path and isinstance(key_path, list):
+        first_key = key_path[0]
+        # try to avoid loading full task for in-memory keys instead
+        # of getting full task dict.
+        first_key_val = task.get_field(first_key)
+        if first_key_val != _TaskFieldSentile.UNSET:
+            remaining_keys = key_path[1:]
+            if not remaining_keys:
+                return True
+            elif isinstance(first_key_val, dict):
+                tmp_dict = first_key_val
+                for k in remaining_keys:
+                    try:
+                        tmp_dict = tmp_dict[k]
+                    except Exception:
+                        return False
+                return True
+    return False
+
+
 def task_matches_criteria(task: _FlameTask, criteria: dict):
     if criteria['type'] == 'all':
         return True
@@ -633,27 +676,13 @@ def task_matches_criteria(task: _FlameTask, criteria: dict):
         return False
 
     if criteria['type'] == 'equals':
-        criteria_val = criteria['value']
-        # TODO: if more adjusting qualifiers are added, this needs to be reworked.
-        required_keys = {k for k in criteria_val.keys() if not k.startswith('?')}
-        optional_keys = {_normalize_criteria_key(k) for k in criteria_val.keys() if k.startswith('?')}
+        return _matches_equal_criteria(task, criteria['value'])
 
-        task_fields = task.get_field_names()
-        if not required_keys.issubset(task_fields):
-            return False # task is missing required keys, can't match.
-
-        queried_field_names = required_keys.union(optional_keys)
-        normalized_criteria = {_normalize_criteria_key(k): v for k, v in criteria_val.items()}
-        for task_field in task_fields: # ordered to avoid loading unloadable fields
-            if (
-                task_field in queried_field_names
-                and task.get_field(task_field) != normalized_criteria[task_field]
-            ):
-                return False
-
-        return True
+    if criteria['type'] == 'has-key':
+        return _matches_has_key_criteria(task, criteria['value'])
 
     return False
+
 
 def _add_path_to_container(container, path_list, val):
     if not path_list:
