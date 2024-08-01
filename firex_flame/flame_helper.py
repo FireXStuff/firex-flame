@@ -8,6 +8,8 @@ import signal
 from dataclasses import dataclass
 from typing import Optional, List, Union
 import hashlib
+import platform
+import socket
 
 from firexapp.submit.uid import Uid
 
@@ -96,11 +98,16 @@ def find_rec_file(log_dir):
     # Formerly was used for backwards compatability, now an alias for get_rec_file
     return get_rec_file(log_dir)
 
+def get_hostname():
+    myplatform = platform.system()
+    myhostname = socket.gethostname()
+    myhostname = f"{myhostname}.local" if myplatform== "Darwin" and not myhostname.endswith("local") else myhostname
+    return myhostname
+
 
 def get_flame_url(port: int, hostname=None) -> str:
     if hostname is None:
-        from socket import gethostname
-        hostname = gethostname()
+        hostname = get_hostname()
     return 'http://%s:%d' % (hostname, int(port))
 
 
