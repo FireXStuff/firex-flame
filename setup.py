@@ -35,8 +35,7 @@ setup(name='firex_flame',
             "importlib-resources",
             "jsonpath-ng",
             "cryptography==42.0.7",
-            "bcrypt==4.1.3",
-            "certifi==2024.6.2",
+            "bcrypt==4.1.3", # 4.2.0 causes SIGSEGV
       ],
       package_data={
         'firex_flame': ['templates/*.html'],
