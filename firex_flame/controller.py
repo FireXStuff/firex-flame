@@ -135,7 +135,7 @@ class _QueryConfigRegistry:
         if not config:
             config = _LoadedQueryConfig.create_query_config(task_queries, model_file_name)
 
-        return config.query_full_tasks(task_graph)
+        return config.query_full_tasks(task_graph, force=force)
 
 
 class FlameAppController:
@@ -402,7 +402,7 @@ class RunningModelDumper:
         while consuming:
             # drain queue and process all work items at once, de-duplicating work.
             work_items : list[_QueueItem] = self._get_all_from_queue()
-            work_item_types : list[QueueItemType] = {t.item_type for t in work_items}
+            work_item_types : set[QueueItemType] = {t.item_type for t in work_items}
 
             try:
                 if QueueItemType.SLIM_DUMP_TYPE in work_item_types:

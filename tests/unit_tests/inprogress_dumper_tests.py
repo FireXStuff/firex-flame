@@ -245,28 +245,28 @@ class TaskQueryTests(unittest.TestCase):
             )
             controller.running_dumper_queue._queue.join()
 
-            latest_model = controller.query_config_registry._find_config(
+            task_model = controller.query_full_tasks(
+                task_queries=None,
                 model_file_name=model_file_name,
-                query_config=None,
-            ).latest_full_query_result
+                force=True,
+            )
 
-            expected_query_result = {'1': {
-                'name': 'a', 'uuid': '1',
-                'descendants': {
-                    '2': {'name': 'b', 'uuid': '2'},
-                    '3': {
-                        'name': 'c',
-                        'uuid': '3',
-                        'flame_data': {'1': 'a'},
-                        'firex_bound_args': ['arg'],
+            expected_query_result = {
+                '1': {
+                    'name': 'a', 'uuid': '1',
+                    'descendants': {
+                        '2': {'name': 'b', 'uuid': '2'},
+                        '3': {
+                            'name': 'c',
+                            'uuid': '3',
+                            'flame_data': {'1': 'a'},
+                            'firex_bound_args': ['arg'],
+                        }
                     }
                 }
-            }}
+            }
 
-            self.assertEqual(
-                latest_model,
-                expected_query_result,
-            )
+            self.assertEqual(task_model, expected_query_result)
 
             controller.update_graph_and_sio_clients(
                 [
