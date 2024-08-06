@@ -368,7 +368,7 @@ def create_revoke_api(
         # so wait a brief amount of time.
         root_uuid = wait_until(
             controller.graph.is_root_started,
-            timeout=20, # startup can be slow.
+            timeout=60, # startup can be slow.
             sleep_for=0.1,
         )
         root_uuid = controller.graph.root_uuid
