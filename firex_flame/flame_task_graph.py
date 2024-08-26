@@ -463,26 +463,24 @@ class FlameTaskGraph:
                     # since other events reference the root UUID via root_id.
                     self.root_uuid = event['root_id']
 
-    def _update_graph_from_task_data(self, event):
-        event_uuid = event.get('uuid')
-        if event_uuid:
-
+    def _update_graph_from_task_data(self, task_uuid, event):
+        if task_uuid:
             parent_id = event.get('parent_id')
             if parent_id:
-                self._add_parent_and_child(parent_id, event_uuid)
+                self._add_parent_and_child(parent_id, task_uuid)
 
             additional_children = event.get(ADDITIONAL_CHILDREN_KEY)
             if additional_children:
                 for child_uuid in additional_children:
-                    self._add_parent_and_child(event_uuid, child_uuid)
+                    self._add_parent_and_child(task_uuid, child_uuid)
 
     def update_graph_from_celery_events(self, events):
         self._maybe_set_root_uuid(events)
 
         # find only data changes from events.
         new_data_by_task_uuid = self._event_aggregator.aggregate_events(events)
-        for new_task_data in new_data_by_task_uuid.values():
-            self._update_graph_from_task_data(new_task_data)
+        for task_uuid, new_task_data in new_data_by_task_uuid.items():
+            self._update_graph_from_task_data(task_uuid, new_task_data)
 
         slim_update_data_by_uuid = {
             uuid: task
