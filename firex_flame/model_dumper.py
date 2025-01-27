@@ -3,6 +3,7 @@ import logging
 import os
 from pathlib import Path
 import tempfile
+from typing import Optional
 from gevent.fileobject import FileObject
 
 from firex_flame.flame_helper import get_flame_debug_dir, REVOKE_TIMESTAMP_KEY
@@ -74,8 +75,11 @@ def is_run_revoked(firex_logs_dir) -> bool:
         return False
 
 
-def get_flame_url(firex_logs_dir=None, root_model_dir=None):
-    return get_run_metadata(firex_logs_dir, root_model_dir).get('flame_url', None)
+def get_flame_url(firex_logs_dir=None, root_model_dir=None) -> Optional[str]:
+    metadata = get_run_metadata(firex_logs_dir, root_model_dir)
+    if metadata:
+        return metadata.get('flame_url')
+    return None
 
 
 def get_tasks_slim_file(firex_logs_dir=None, root_model_dir=None):
