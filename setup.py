@@ -15,9 +15,9 @@ setup(name='firex_flame',
       packages=find_packages(),
       zip_safe=True,
       install_requires=[
-            "Flask",
-            "Flask-AutoIndex",
-            "Werkzeug",
+            "Flask==3.1.0",
+            "Flask-AutoIndex==0.6.6",
+            "Werkzeug==3.1.3",
 
             # Be very careful changing socketio/engineio versions, as even middle numbers have included breakages in the past.
             # Always test version changes of socketio/engineio against the target UI version of socketio-client.
