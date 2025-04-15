@@ -34,7 +34,7 @@ setup(name='firex_flame',
             "gevent",
             "importlib-resources",
             "jsonpath-ng",
-            "cryptography==42.0.7",
+            "cryptography==43.0.1",
             "bcrypt==4.1.3", # 4.2.0 causes SIGSEGV
       ],
       package_data={
