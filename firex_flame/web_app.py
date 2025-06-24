@@ -15,7 +15,8 @@ from flask import Flask, redirect, send_from_directory, Response, render_templat
 
 from firex_flame.api import create_socketio_task_api, create_revoke_api, create_rest_task_api
 from firexapp.submit.reporting import REL_COMPLETION_REPORT_PATH
-from firex_flame.flame_helper import get_flame_url, FlameServerConfig
+from firexapp.engine.run_controller import FireXRunController
+from firex_flame.flame_helper import FlameServerConfig, get_flame_url_from_port
 from firex_flame.controller import FlameAppController
 
 
@@ -177,13 +178,16 @@ def start_web_server(
     if celery_app:
         # Celery app means this is initial launch, not a replay from a rec file.
         # Can only dump initial metadata now that flame_url is set.
+        assert server.server_port, 'Web server port not set after start.'
         controller.dump_updated_metadata(
-            {'flame_url': get_flame_url(server.server_port)},
+            {'flame_url': get_flame_url_from_port(server.server_port)},
         )
         create_revoke_api(
             controller,
             web_app,
-            celery_app,
+            FireXRunController(
+                celery_app,
+                controller.run_metadata['logs_dir']),
             server_config.authed_user_request_path,
         )
 

@@ -13,7 +13,7 @@ from firexapp.submit.install_configs import FireXInstallConfigs
 
 from firex_flame.flame_helper import DEFAULT_FLAME_TIMEOUT, get_flame_debug_dir, get_rec_file, is_json_file, \
     get_flame_redirect_file_path
-from firex_flame.model_dumper import is_dump_complete, get_run_metadata_file, get_flame_url
+from firex_flame.model_dumper import is_dump_complete, get_run_metadata_file, wait_and_get_flame_url
 from firexapp.discovery import PkgVersionInfo
 
 logger = setup_console_logging(__name__)
@@ -188,8 +188,11 @@ class FlameLauncher(TrackingService):
         return True
 
     def get_viewer_url(self):
-        if not self.install_configs.has_viewer():
-            return get_flame_url(firex_logs_dir=self.firex_logs_dir)
+        if (
+            not self.install_configs.has_viewer()
+            and self.firex_logs_dir
+        ):
+            return wait_and_get_flame_url(self.firex_logs_dir, timeout=0)
         return self.install_configs.run_url
 
     @staticmethod
