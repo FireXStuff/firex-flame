@@ -6,8 +6,7 @@ import tempfile
 from typing import Optional
 from gevent.fileobject import FileObject
 
-from firexapp.common import wait_until
-from firex_flame.flame_helper import get_flame_debug_dir
+from firex_flame.flame_helper import get_flame_debug_dir, REVOKE_TIMESTAMP_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -67,21 +66,20 @@ def get_run_metadata(firex_logs_dir=None, root_model_dir=None):
         return json.loads(Path(run_metadata_file).read_text())
     return None
 
+def is_run_revoked(firex_logs_dir) -> bool:
+    try:
+        return bool(
+            get_run_metadata(firex_logs_dir).get(REVOKE_TIMESTAMP_KEY)
+        )
+    except Exception:
+        return False
 
-def _get_flame_url(firex_logs_dir) -> Optional[str]:
-    metadata = get_run_metadata(firex_logs_dir)
+
+def get_flame_url(firex_logs_dir=None, root_model_dir=None) -> Optional[str]:
+    metadata = get_run_metadata(firex_logs_dir, root_model_dir)
     if metadata:
         return metadata.get('flame_url')
     return None
-
-
-def wait_and_get_flame_url(firex_logs_dir: str, timeout=15, sleep_for=0.5) -> Optional[str]:
-    return wait_until(
-        _get_flame_url,
-        timeout=timeout,
-        sleep_for=sleep_for,
-        firex_logs_dir=firex_logs_dir,
-    )
 
 
 def get_tasks_slim_file(firex_logs_dir=None, root_model_dir=None):

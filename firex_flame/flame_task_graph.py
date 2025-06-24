@@ -1,7 +1,9 @@
 import logging
-from typing import Optional, Any, Union
+from typing import Optional, Any
 import re
 from datetime import datetime
+import logging
+from typing import Any, Optional, Union
 import dataclasses
 import os
 import tarfile
@@ -15,6 +17,7 @@ import subprocess
 from firexkit.task import FIREX_REVOKE_COMPLETE_EVENT_TYPE
 from firexapp.events.model import ADDITIONAL_CHILDREN_KEY, EXTERNAL_COMMANDS_KEY
 from firexapp.events.event_aggregator import event_type_to_task_state, REVOKED_EVENT_TYPE
+from firexapp.events.model import ADDITIONAL_CHILDREN_KEY
 from firex_flame.flame_helper import flatten, deep_merge
 from firex_flame.model_dumper import get_all_tasks_dir, get_tasks_slim_file, get_run_metadata_file, \
     get_model_complete_file, atomic_write_json, get_flame_model_dir
@@ -40,7 +43,7 @@ def _event_type_handler(event: dict[str, Any]) -> dict[str, Any]:
             'states': [{'state': state,
                         'timestamp': event.get('local_received')}],
         }
-        if state in [REVOKED_EVENT_TYPE, FIREX_REVOKE_COMPLETE_EVENT_TYPE]:
+        if state == REVOKED_EVENT_TYPE:
             # tasks can become not-revoked after being revoked, so we need to keep track of revoked state
             # explicitly. Consider doing all revoked state based on FIREX_REVOKE_COMPLETE_EVENT_TYPE,
             # but there can be a big delay between REVOKED_EVENT_TYPE and FIREX_REVOKE_COMPLETE_EVENT_TYPE

@@ -17,7 +17,7 @@ from threading import Timer
 
 from firex_flame.main_app import start_flame
 from firex_flame.flame_helper import get_flame_debug_dir, get_flame_pid_file_path, DEFAULT_FLAME_TIMEOUT, \
-    BrokerConsumerConfig, get_flame_url_from_port, wait_until, FlameServerConfig, REVOKE_REASON_KEY
+    BrokerConsumerConfig, get_flame_url, wait_until, FlameServerConfig, REVOKE_REASON_KEY, REVOKE_TIMESTAMP_KEY
 # Prevent dependencies from taking module loading hit of pkg_resources.
 from firexapp.submit.submit import OptionalBoolean
 
@@ -141,8 +141,8 @@ def _create_run_metadata(cli_args):
         'flame_url': None,
         'firex_bin': cli_args.firex_bin_path,
         'root_uuid': None,
-        REVOKE_REASON_KEY: None, # FIXME: delete entirely; moved to run.json
-        'revoke_timestamp': None, # FIXME: delete entirely; moved to run.json
+        REVOKE_REASON_KEY: None,
+        REVOKE_TIMESTAMP_KEY: None,
     }
 
 
@@ -195,7 +195,7 @@ def main():
         )
         # Allow the shutdown handler to stop the web server before we serve_forever.
         shutdown_handler.web_server = web_server
-        print(f"Flame server running on: {get_flame_url_from_port(web_server.server_port)}")
+        print(f"Flame server running on: {get_flame_url(web_server.server_port)}")
         web_server.serve_forever()
     except Exception as e:
         logger.exception(e)

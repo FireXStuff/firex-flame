@@ -21,7 +21,7 @@ def create_broker_consumer_thread(broker_consumer_config, controller,
         logger.error(f"Failed to load broker URL from logs dir: {logs_dir}")
         raise
     else:
-        celery_app = celery.Celery(broker=broker_url, backend=broker_url)
+        celery_app = celery.Celery(broker=broker_url)
         return BrokerEventConsumerThread(celery_app,
                                          controller,
                                          broker_consumer_config,

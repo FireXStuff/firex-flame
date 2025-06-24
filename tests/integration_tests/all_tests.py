@@ -14,6 +14,7 @@ from pathlib import Path
 from bs4 import BeautifulSoup
 import socketio
 from firexapp.testing.config_base import FlowTestConfiguration, assert_is_good_run
+from firexapp.submit.submit import get_log_dir_from_output
 from firexapp.submit.uid import Uid
 from firexapp.engine.celery import app
 from firexapp.firex_subprocess import check_output
@@ -27,7 +28,7 @@ from firex_flame.flame_helper import get_flame_pid, wait_until_pid_not_exist, wa
     filter_paths, REVOKE_REASON_KEY
 from firex_flame.flame_task_graph import INCOMPLETE_STATES, COMPLETE_STATES, is_task_dict_complete
 from firex_flame.model_dumper import get_tasks_slim_file, get_model_full_tasks_by_names, is_dump_complete, \
-    get_run_metadata_file, wait_and_get_flame_url, find_flame_model_dir, load_task_representation, load_slim_tasks, \
+    get_run_metadata_file, get_flame_url, find_flame_model_dir, load_task_representation, load_slim_tasks, \
     get_run_metadata, get_model_slim_tasks_by_names
 
 
@@ -38,9 +39,8 @@ class FlameFlowTestConfiguration(FlowTestConfiguration):
     __metaclass__ = abc.ABCMeta
 
     def assert_expected_firex_output(self, cmd_output, cmd_err):
-        assert self.run_data
-        log_dir = self.run_data.logs_path
-        flame_url = wait_and_get_flame_url(log_dir, timeout=10)
+        log_dir = get_log_dir_from_output(cmd_output)
+        flame_url = wait_until(get_flame_url, 10, 0.5, firex_logs_dir=log_dir)
         assert flame_url, "Found no Flame URL in logs_dir"
         try:
             self.assert_on_flame_url(log_dir, flame_url)
@@ -475,9 +475,8 @@ class FlameTerminateOnCompleteTest(FlameFlowTestConfiguration):
         # the broker processor to shutdown flame gracefully.
         flame_killed = wait_until_pid_not_exist(get_flame_pid(log_dir), timeout=30)
         assert flame_killed, 'Flame not terminated after root revoked, even though terminate_on_complete was supplied.'
-
-        actual_revoke_reason = self.completed_run.revoked_details.reason
-        assert actual_revoke_reason, f'Expected {revoke_reason}, found {actual_revoke_reason}'
+        actual_revoke_reason = get_run_metadata(log_dir).get(REVOKE_REASON_KEY)
+        assert actual_revoke_reason == revoke_reason, f'Expected {revoke_reason}, found {actual_revoke_reason}'
 
 
 # noinspection PyUnusedLocal
