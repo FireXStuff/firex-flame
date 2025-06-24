@@ -6,14 +6,21 @@ import logging
 from socket import gethostname
 import os
 import subprocess
+import requests
+from typing import Optional
+import urllib.parse
+import getpass
 
 from flask import jsonify, request
 from gevent import spawn, sleep
 import paramiko
 
+from firexapp.engine.run_controller import FireXRunController
 from firex_flame.flame_helper import wait_until, REVOKE_REASON_KEY
 from firex_flame.flame_task_graph import FlameTaskGraph, is_task_dict_complete
 from firex_flame.controller import FlameAppController
+from firex_flame.model_dumper import wait_and_get_flame_url
+
 
 logger = logging.getLogger(__name__)
 
@@ -317,7 +324,7 @@ def _uuid_and_reason_from_revoke_data(revoke_data):
 def create_revoke_api(
     controller: FlameAppController,
     web_app,
-    celery_app,
+    run_controller: FireXRunController,
     authed_user_request_path,
 ):
     assert controller.sio_server is not None
@@ -387,29 +394,54 @@ def create_revoke_api(
         if task is None:
             return False
 
-        prev_revoked_data = None
         if not is_task_dict_complete(task):
-            run_revoked = controller.graph.root_uuid == uuid
-            if run_revoked:
-                prev_revoked_data = controller.get_revoke_data()
-                controller.update_revoke_reason(revoke_reason)
-            celery_app.control.revoke(uuid, terminate=True)
-            logger.info(f"Submitted revoke to celery for: {uuid}")
+            run_controller.revoke_task(
+                uuid,
+                revoke_reason,
+                revoking_user=user,
+                is_root_task=controller.graph.root_uuid == uuid,
+            )
         else:
             logger.info(f"Task {uuid} already in terminal state {task['state']}")
 
         # Wait for the task to become revoked
         revoke_timeout = 10
 
-        revoked = wait_until(controller.graph.was_revoked, timeout=revoke_timeout, sleep_for=1, uuid=uuid)
+        revoked = wait_until(controller.graph.was_revoked, timeout=revoke_timeout, sleep_for=0.5, uuid=uuid)
         if not revoked:
             task = controller.graph.get_slim_task_dict(uuid)
             logger.warning(
-                f"Failed to revoke task: waited {revoke_timeout} sec and runstate is currently {task['state']}")
-            if prev_revoked_data:
-                # restore the previous revoke data since the revoke has appeared to fail.
-                controller.dump_updated_metadata(prev_revoked_data)
+                f"Failed to revoke  task: waited {revoke_timeout} sec and runstate is currently {task['state']}")
         else:
             logger.debug(f"Successfully revoked task {uuid}.")
 
         return revoked  # If the task was successfully revoked, return true
+
+
+def flame_revoke_run(
+    logs_dir : str,
+    task_uuid : Optional[str]=None,
+    revoke_reason: Optional[str]=None,
+    revoking_user: Optional[str]=getpass.getuser(),
+    timeout=10*60,
+) -> Optional[requests.Response]:
+
+    flame_url = wait_and_get_flame_url(firex_logs_dir=logs_dir)
+    if not flame_url:
+        logger.warning(f"Flame URL not found for {logs_dir}; revoke via Flame will likely fail.")
+    else:
+        # requesting /api/revoke will revoke the root task, which revoked the entire run.
+        url_path = '/api/revoke'
+        if task_uuid:
+            url_path = os.path.join(url_path, task_uuid)
+
+        url_params = {'revoking_user': revoking_user}
+        if revoke_reason:
+            url_params[REVOKE_REASON_KEY] = revoke_reason
+
+        return requests.get(
+            urllib.parse.urljoin(flame_url, url_path),
+            params=url_params,
+            timeout=timeout)
+
+    return None

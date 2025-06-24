@@ -1,6 +1,5 @@
 import logging
 from typing import Any, Optional
-import time
 from dataclasses import dataclass, field
 from enum import Enum
 import json
@@ -11,9 +10,7 @@ import socketio
 from gevent import spawn, sleep
 from gevent.queue import JoinableQueue
 
-from firex_flame.flame_helper import get_dict_json_md5, REVOKE_REASON_KEY, \
-    REVOKE_TIMESTAMP_KEY
-from firexapp.submit.submit import ASYNC_SHUTDOWN_CELERY_EVENT_TYPE
+from firex_flame.flame_helper import get_dict_json_md5
 from firex_flame.flame_task_graph import FlameTaskGraph, FlameModelDumper, NoWritngModelDumper
 
 
@@ -165,8 +162,6 @@ class FlameAppController:
         self.sio_server : Optional[socketio.Server] = None
 
     def update_graph_and_sio_clients(self, events: list[dict[str, Any]]) -> None:
-        self._maybe_update_run_revoked(events)
-
         new_data_by_task_uuid, slim_update_data_by_uuid = self.graph.update_graph_from_celery_events(
             events,
         )
@@ -191,16 +186,6 @@ class FlameAppController:
             _get_changed_uuids(new_data_by_task_uuid),
         )
 
-    def _maybe_update_run_revoked(self, events: list[dict[str, Any]]) -> None:
-        shutdown_events = [
-            e for e in events
-            if e.get('type') == ASYNC_SHUTDOWN_CELERY_EVENT_TYPE
-        ]
-        if shutdown_events:
-            self.update_revoke_reason(
-                shutdown_events[-1].get('shutdown_reason'),
-            )
-
     def _update_slim_listening_sio_clients(self, slim_update_data_by_uuid):
         # sio_server can be lazy initialized. Since the event receiving process starts before the
         # web modules are loaded, extremely early events can't be delivered.
@@ -208,22 +193,6 @@ class FlameAppController:
             # Avoid sending events if there aren't fields the downstream cares about.
             if slim_update_data_by_uuid:
                 self.sio_server.emit('tasks-update', slim_update_data_by_uuid)
-
-    def get_revoke_data(self):
-        return {
-            k: v for k, v in self.run_metadata.items()
-            if k in [REVOKE_REASON_KEY, REVOKE_TIMESTAMP_KEY]
-        }
-
-    def update_revoke_reason(self, revoke_reason, revoke_timestap=None):
-        if revoke_timestap is None:
-            revoke_timestap = time.time()
-        self.dump_updated_metadata(
-            {
-                REVOKE_REASON_KEY: revoke_reason,
-                REVOKE_TIMESTAMP_KEY: revoke_timestap,
-            }
-        )
 
     def dump_updated_metadata(self, update: dict[str, Any]) -> None:
         self.run_metadata.update(update)
