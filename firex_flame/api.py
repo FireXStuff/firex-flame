@@ -418,9 +418,9 @@ def create_revoke_api(
         return revoked  # If the task was successfully revoked, return true
 
 
-def flame_revoke_run(
+def flame_revoke(
     logs_dir : str,
-    task_uuid : Optional[str]=None,
+    task_uuid : Optional[str]=None, # None revokes the whole run by revoking the root task.
     revoke_reason: Optional[str]=None,
     revoking_user: Optional[str]=getpass.getuser(),
     timeout=10*60,
