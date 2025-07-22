@@ -37,7 +37,7 @@ class _LoadedQueryConfig:
 
     def update_latest_and_clients(
         self,
-        sio_server,
+        sio_server: Optional['socketio.Server'],
         changed_uuids: list[str],
         task_graph: FlameTaskGraph,
     ) -> bool:
@@ -54,7 +54,10 @@ class _LoadedQueryConfig:
             and updated_partial_query_result
         ):
             # send new data to clients listening on this query.
-            sio_server.emit('tasks-query-update', data=updated_partial_query_result, room=self.md5_hash)
+            sio_server.emit(
+                'tasks-query-update',
+                data=updated_partial_query_result,
+                room=self.md5_hash)
 
         return bool(updated_partial_query_result)
 
@@ -95,7 +98,7 @@ class _QueryConfigRegistry:
         query_md5 = get_dict_json_md5(query_config)
         return self._find_config_by_hash(query_md5)
 
-    def add_query_config(self, sio_server, query_config, model_file_name, sid) -> _LoadedQueryConfig:
+    def add_query_config(self, sio_server, query_config, model_file_name, sid):
         config = self._find_config(query_config, model_file_name)
         if not config:
             config = _LoadedQueryConfig.create_query_config(query_config, model_file_name)
@@ -112,7 +115,7 @@ class _QueryConfigRegistry:
 
     def update_latest_and_listening_clients(
         self,
-        sio_server: 'socketio.Server',
+        sio_server: Optional['socketio.Server'],
         changed_uuids,
         task_graph: FlameTaskGraph,
     ):

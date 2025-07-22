@@ -9,7 +9,6 @@ import traceback
 import json
 import time
 from typing import Optional
-from typing import Any
 from io import TextIOWrapper
 from datetime import datetime, timezone, timedelta
 

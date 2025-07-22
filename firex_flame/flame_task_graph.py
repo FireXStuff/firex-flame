@@ -12,9 +12,8 @@ import time
 import shutil
 import subprocess
 
-from firexkit.task import FIREX_REVOKE_COMPLETE_EVENT_TYPE
-from firexapp.events.model import ADDITIONAL_CHILDREN_KEY, EXTERNAL_COMMANDS_KEY
-from firexapp.events.event_aggregator import event_type_to_task_state, REVOKED_EVENT_TYPE
+from firexapp.events.model import ADDITIONAL_CHILDREN_KEY, EXTERNAL_COMMANDS_KEY, RunStates
+from firexapp.events.event_aggregator import transform_task_state
 from firex_flame.flame_helper import flatten, deep_merge
 from firex_flame.model_dumper import get_all_tasks_dir, get_tasks_slim_file, get_run_metadata_file, \
     get_model_complete_file, atomic_write_json, get_flame_model_dir
@@ -31,28 +30,6 @@ TASKS_BY_UUID_TYPE = dict[str, TASK_TYPE] # fixme should probably data model
 
 TASK_ARGS = 'firex_bound_args'
 
-def _event_type_handler(event: dict[str, Any]) -> dict[str, Any]:
-    event_type = event.get('type')
-    if event_type in STATE_TYPES:
-        state = event_type_to_task_state(event_type)
-        transformed_data = {
-            'state': state,
-            'states': [{'state': state,
-                        'timestamp': event.get('local_received')}],
-        }
-        if state in [REVOKED_EVENT_TYPE, FIREX_REVOKE_COMPLETE_EVENT_TYPE]:
-            # tasks can become not-revoked after being revoked, so we need to keep track of revoked state
-            # explicitly. Consider doing all revoked state based on FIREX_REVOKE_COMPLETE_EVENT_TYPE,
-            # but there can be a big delay between REVOKED_EVENT_TYPE and FIREX_REVOKE_COMPLETE_EVENT_TYPE
-            # due to cleanup done by the root task.
-            transformed_data['was_revoked'] = True
-
-        return transformed_data
-    else:
-        transformed_data = {}
-        if event_type == 'task-completed':
-            transformed_data['has_completed'] = True
-        return transformed_data
 
 # config field options:
 #   copy_celery - True if this field should be copied from the celery event to the task data model. If the field already
@@ -82,7 +59,7 @@ FIELD_CONFIG = {
     'parent_id': {'copy_celery': True, 'slim_field': True},
     'type': {
         'copy_celery': True,
-        'transform_celery': _event_type_handler,
+        'transform_celery': transform_task_state,
     },
     'retries': {'copy_celery': True, 'slim_field': True},
     TASK_ARGS: {'copy_celery': True},
@@ -113,7 +90,9 @@ FIELD_CONFIG = {
         'slim_field': True,
         # TODO: firexapp should send long_name, since it will overwrite 'name' copied from celery. Then get rid of
         # the following config.
-        'transform_celery': lambda e: {'name': e['name'].split('.')[-1], 'long_name': e['name']},
+        'transform_celery': lambda e: {
+            'name': e['name'].split('.')[-1],
+            'long_name': e['name']},
     },
     'called_as_orig': {
         'copy_celery': True,
@@ -181,22 +160,9 @@ AGGREGATE_MERGE_FIELDS = _get_keys_with_true(FIELD_CONFIG, 'aggregate_merge')
 AGGREGATE_KEEP_INITIAL_FIELDS = _get_keys_with_true(FIELD_CONFIG, 'aggregate_keep_initial')
 AGGREGATE_NO_OVERWRITE_FIELDS = AGGREGATE_MERGE_FIELDS + AGGREGATE_KEEP_INITIAL_FIELDS
 
-FIELD_TO_CELERY_TRANSFORMS = {k: v['transform_celery'] for k, v in FIELD_CONFIG.items() if 'transform_celery' in v}
-
-RECEIVED_EVENT_TYPE = 'task-received'
-STATE_TYPES = {
-    RECEIVED_EVENT_TYPE: {'terminal': False},
-    'task-started': {'terminal': False},
-    'task-blocked': {'terminal': False},
-    'task-unblocked': {'terminal': False},
-    'task-succeeded': {'terminal': True},
-    'task-failed': {'terminal': True}, # failure may or may not be terminal, depending on retries :/
-    REVOKED_EVENT_TYPE: {'terminal': True},
-    'task-incomplete': {'terminal': True},  # server-side kludge state to fix tasks that will never complete.
-    FIREX_REVOKE_COMPLETE_EVENT_TYPE: {'terminal': True}
-}
-COMPLETE_STATES = [s for s, v in STATE_TYPES.items() if v['terminal']]
-INCOMPLETE_STATES = [s for s, v in STATE_TYPES.items() if not v['terminal']]
+FIELD_TO_CELERY_TRANSFORMS = {
+    k: v['transform_celery'] for k, v in FIELD_CONFIG.items()
+    if 'transform_celery' in v}
 
 class _TaskFieldSentile(Enum):
     UNSET = 1
@@ -247,25 +213,11 @@ class _ModelledFlameTask:
                 setattr(self, k, update_dict[k])
 
 
-def is_task_dict_complete(task_dict):
-    return (
-        task_dict.get('state') in [
-            'task-succeeded',
-            'task-incomplete',
-            # FIREX_REVOKE_COMPLETE_EVENT_TYPE, # not a UI state, but could be.
-        ]
-        or (
-            task_dict.get('has_completed')
-            and task_dict.get('state') in [
-                # is not terminal in the presence or retries.
-                'task-failed',
-                # sent by celery when revoke request is received,
-                # does not imply task is complete unless 'task-completed' is also received.
-                REVOKED_EVENT_TYPE,
-            ]
-        )
+def is_task_dict_complete(task_dict) -> bool:
+    return RunStates.is_complete_state(
+        task_dict.get('state'),
+        has_completed=task_dict.get('has_completed'),
     )
-
 
 
 @dataclasses.dataclass
@@ -424,7 +376,7 @@ class FlameTaskGraph:
                     result_tasks_by_uuid[related_uuid] = self._tasks_by_uuid[related_uuid]
                 if related_uuid not in checked_uuids:
                     to_check_uuids.append(related_uuid)
-        return result_tasks_by_uuid.values()
+        return list(result_tasks_by_uuid.values())
 
     def get_descendants_of_uuid(self, task_uuid) -> list[_FlameTask]:
         return self._walk_task_graph(
@@ -506,7 +458,7 @@ class FlameTaskGraph:
         task = self._tasks_by_uuid.get(self.root_uuid)
         if task is None:
             return False
-        return task.get_task_state() not in [None, RECEIVED_EVENT_TYPE]
+        return task.get_task_state() not in [None, RunStates.RECEIVED.to_celery_event_type()]
 
     def is_root_complete(self) -> bool:
         task = self._tasks_by_uuid.get(self.root_uuid)
@@ -978,11 +930,18 @@ class FlameEventAggregator:
         :return:
         """
         now = datetime.now().timestamp()
-        return [{'uuid': task.get_uuid(),
-                 'type': 'task-incomplete',
-                 'actual_runtime': now - task.get_field('first_started', now)}
-                for task in self._tasks_by_uuid.values()
-                if not task.is_complete()]
+        return [
+            {
+                'uuid': task.get_uuid(),
+                'type': RunStates.get_forced_complete_celery_event_type(
+                    task.get_field('state'),
+                    task.get_field('has_completed') ,
+                ),
+                'actual_runtime': now - task.get_field('first_started', now)
+            }
+            for task in self._tasks_by_uuid.values()
+            if not task.is_complete()
+        ]
 
     def _get_or_create_task(self, task_uuid) -> tuple[_FlameTask, bool]:
         if task_uuid not in self._tasks_by_uuid:
@@ -1004,7 +963,7 @@ class FlameEventAggregator:
             # Therefore ignore events that are for a new UUID that have revoked type.
             or (
                 event['uuid'] not in self._tasks_by_uuid
-                and event.get('type') == 'task-revoked'
+                and event.get('type') == RunStates.REVOKED.to_celery_event_type()
             )
         ):
             return {}
@@ -1026,12 +985,13 @@ class FlameEventAggregator:
 
 class FlameModelDumper:
 
-    def __init__(self, firex_logs_dir=None, root_model_dir=None):
+    def __init__(self, firex_logs_dir=None, root_model_dir: Optional[str]=None):
         assert bool(firex_logs_dir) ^ bool(root_model_dir), \
             "Dumper needs exclusively either logs dir or root model dir."
         if firex_logs_dir:
             self.root_model_dir = get_flame_model_dir(firex_logs_dir)
         else:
+            assert root_model_dir
             self.root_model_dir = root_model_dir
         os.makedirs(self.root_model_dir, exist_ok=True)
 
@@ -1101,9 +1061,7 @@ class FlameModelDumper:
         force=False,
         min_age_change=0,
     ):
-
         out_file = os.path.join(self.root_model_dir, model_file_name)
-
         try:
             should_write = (
                 force

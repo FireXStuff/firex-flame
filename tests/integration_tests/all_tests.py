@@ -21,11 +21,11 @@ from firexapp.events.model import EXTERNAL_COMMANDS_KEY
 from firexkit.chain import returns
 from firexkit.task import flame
 
-
+from firexapp.events.event_aggregator import RunStates
 from firex_flame.flame_helper import get_flame_pid, wait_until_pid_not_exist, wait_until, \
     kill_flame, kill_and_wait, json_file_fn, wait_until_path_exist, deep_merge, wait_until_web_request_ok, \
     filter_paths, REVOKE_REASON_KEY
-from firex_flame.flame_task_graph import INCOMPLETE_STATES, COMPLETE_STATES, is_task_dict_complete
+from firex_flame.flame_task_graph import is_task_dict_complete
 from firex_flame.model_dumper import get_tasks_slim_file, get_model_full_tasks_by_names, is_dump_complete, \
     get_run_metadata_file, wait_and_get_flame_url, find_flame_model_dir, load_task_representation, load_slim_tasks, \
     get_run_metadata, get_model_slim_tasks_by_names
@@ -272,8 +272,7 @@ class FlameRevokeSuccessTest(FlameFlowTestConfiguration):
         sleep_exists = wait_until_model_task_name_exists(log_dir, 'sleep')
         assert sleep_exists, "Sleep task doesn't exist in the flame rec file, something is wrong with run."
         sleep_task = get_task_by_name(log_dir, 'sleep')
-        assert sleep_task['state'] in INCOMPLETE_STATES, \
-            "Expected incomplete sleep, but found %s" % sleep_task['state']
+        assert RunStates.is_incomplete_state(sleep_task['state']), f"Expected incomplete sleep, but found {sleep_task['state']}"
 
         sio_client = socketio.Client()
         resp = {'response': None}
@@ -292,14 +291,19 @@ class FlameRevokeSuccessTest(FlameFlowTestConfiguration):
         wait_until(lambda: resp['response'] is not None, timeout=30, sleep_for=1)
         sio_client.disconnect()
 
-        assert resp['response'] == SUCCESS_EVENT, "Expected response %s but received %s" \
-                                                  % (SUCCESS_EVENT, resp['response'])
+        assert resp['response'] == SUCCESS_EVENT, f"Expected response {SUCCESS_EVENT} but received {resp['response']}"
 
         # Need to re-parse task data, since now it should be revoked.
         sleep_task_after_revoke = get_task_by_name(log_dir, 'sleep')
         sleep_runstate = sleep_task_after_revoke['state']
-        assert sleep_runstate == 'task-revoked', "Expected sleep runstate to be revoked, was %s" % sleep_runstate
+        assert RunStates(sleep_runstate).is_revoke(), f"Expected sleep runstate to be revoked, was {sleep_runstate}"
 
+
+def _is_revoked(runstate: str) -> bool:
+    try:
+        return RunStates(runstate).is_revoke()
+    except ValueError:
+        return False
 
 class FlameRevokeRootRestSuccessTest(FlameFlowTestConfiguration):
     """ Uses Flame's REST API to revoke a run. """
@@ -320,7 +324,7 @@ class FlameRevokeRootRestSuccessTest(FlameFlowTestConfiguration):
         assert revoke_request.ok, f"Unexpected HTTP response to revoke: {revoke_request}"
 
         root_revoked = wait_until_complete_model_tasks_predicate(
-            lambda ts: any(t['name'] == 'RootTask' and t.get('state') == 'task-revoked' for t in ts.values()),
+            lambda ts: any(t['name'] == 'RootTask' and _is_revoked(t.get('state')) for t in ts.values()),
             log_dir)
         if not root_revoked:
             root_task_state = get_task_by_name(log_dir, 'RootTask').get('state')
@@ -364,7 +368,7 @@ def find_task_by_name(tasks_by_uuid, task_name):
 def _is_task_complete(tasks_by_uuid, task_name):
     named_task = find_task_by_name(tasks_by_uuid, task_name)
     if named_task:
-        return named_task.get('state') in COMPLETE_STATES
+        return RunStates.is_complete_state(named_task.get('state'))
     return False
 
 class FlameSocketIoTaskQueryTest(FlameFlowTestConfiguration):
@@ -392,7 +396,7 @@ class FlameSocketIoTaskQueryTest(FlameFlowTestConfiguration):
 
             task = wait_until(does_waiting_parent_exist, 10, 1)
             assert task, "Could not find WaitingParent"
-            assert task.get('state') in INCOMPLETE_STATES, f"Task not in an incomplete stat: {task.get('state')}"
+            assert RunStates.is_incomplete_state(task.get('state')), f"Task not in an incomplete stat: {task.get('state')}"
 
         sio_client = socketio.Client()
         client_tasks_by_uuid = {}

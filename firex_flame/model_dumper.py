@@ -28,7 +28,7 @@ def atomic_write_json(filename, data):
         os.replace(f.name, filename)
 
 
-def get_flame_model_dir(firex_logs_dir):
+def get_flame_model_dir(firex_logs_dir) -> str:
     return os.path.join(get_flame_debug_dir(firex_logs_dir), 'model')
 
 
