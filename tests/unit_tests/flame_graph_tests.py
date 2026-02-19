@@ -2,7 +2,11 @@ import unittest
 
 from firex_flame.flame_task_graph import _TaskFieldSentile, _FlameTask
 
-basic_event = {'uuid': '1', 'long_name': 'prefix.SomeTask', 'type': 'task-started', 'local_received': 0}
+basic_event = {
+    'uuid': '1',
+    'long_name': 'prefix.SomeTask',
+    'type': 'task-started-info',
+    'local_received': 0}
 basic_event_added_fields = {
     'state': basic_event['type'],
     'task_num': 1,

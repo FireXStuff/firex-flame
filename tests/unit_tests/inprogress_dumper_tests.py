@@ -143,7 +143,7 @@ class TaskQueryTests(unittest.TestCase):
                 min_age_repr_dump=0, # disable dump age throttling.
             )
             controller.update_graph_and_sio_clients(
-                [{'uuid': uuid1, 'name': 'hello', 'flame_data': 'some_data', 'parent_id': None, 'type': 'task-started'}]
+                [{'uuid': uuid1, 'name': 'hello', 'flame_data': 'some_data', 'parent_id': None, 'type': 'task-started-info'}]
             )
             controller.running_dumper_queue._queue.join()
 
@@ -158,7 +158,7 @@ class TaskQueryTests(unittest.TestCase):
             # double update necessary till aggregator moved in to controller.
             controller.update_graph_and_sio_clients(
                 [
-                    {'uuid': '2', 'name': 'hello_child', 'parent_id': uuid1, 'type': 'task-started'}
+                    {'uuid': '2', 'name': 'hello_child', 'parent_id': uuid1, 'type': 'task-started-info'}
                 ]
             )
             controller.running_dumper_queue._queue.join()
@@ -231,13 +231,13 @@ class TaskQueryTests(unittest.TestCase):
             )
             controller.update_graph_and_sio_clients(
                 [
-                    {'uuid': uuid1, 'name': 'a', 'parent_id': None, 'type': 'task-started'},
-                    {'uuid': '2', 'name': 'b', 'parent_id': '1', 'type': 'task-started'},
+                    {'uuid': uuid1, 'name': 'a', 'parent_id': None, 'type': 'task-started-info'},
+                    {'uuid': '2', 'name': 'b', 'parent_id': '1', 'type': 'task-started-info'},
                     {
                         'uuid': '3',
                         'name': 'c',
                         'parent_id': '2',
-                        'type': 'task-started',
+                        'type': 'task-started-info',
                         'flame_data': {'1': 'a'},
                         'firex_bound_args': ['arg'],
                     },

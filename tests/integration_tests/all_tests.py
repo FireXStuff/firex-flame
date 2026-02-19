@@ -296,12 +296,12 @@ class FlameRevokeSuccessTest(FlameFlowTestConfiguration):
         # Need to re-parse task data, since now it should be revoked.
         sleep_task_after_revoke = get_task_by_name(log_dir, 'sleep')
         sleep_runstate = sleep_task_after_revoke['state']
-        assert RunStates(sleep_runstate).is_revoke(), f"Expected sleep runstate to be revoked, was {sleep_runstate}"
+        assert RunStates.create(sleep_runstate).is_revoke(), f"Expected sleep runstate to be revoked, was {sleep_runstate}"
 
 
 def _is_revoked(runstate: str) -> bool:
     try:
-        return RunStates(runstate).is_revoke()
+        return RunStates.create(runstate).is_revoke()
     except ValueError:
         return False
 
@@ -690,7 +690,8 @@ RETURN = 1
 @flame('flame_data_result', _flame_return_result_fn)
 @returns('flame_data_result')
 def FlameDataService(self, uid, arg1, arg2='default'):
-    self.update_firex_data(custom_key=CUSTOM_VALUE)
+
+    self.send_flame(dict(custom_key=CUSTOM_VALUE))
     self.send_firex_html(unregistered=UNREGISTERED_HTML_VALUE)
 
     check_output(['/bin/echo', 'hello'])

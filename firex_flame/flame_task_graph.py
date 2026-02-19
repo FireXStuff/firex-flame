@@ -31,6 +31,14 @@ TASKS_BY_UUID_TYPE = dict[str, TASK_TYPE] # fixme should probably data model
 TASK_ARGS = 'firex_bound_args'
 
 
+def _times_from_event(event: dict[str, Any]) -> dict:
+    times = dict(latest_timestamp=event['local_received'])
+    if event.get('type') == 'task-started-info':
+        # Note first_started is never overwritten by aggregation.
+        times['first_started'] = event['local_received']
+    return times
+
+
 # config field options:
 #   copy_celery - True if this field should be copied from the celery event to the task data model. If the field already
 #                   has a value on the data model, more recent celery field values will overwrite existing values by
@@ -109,11 +117,7 @@ FIELD_CONFIG = {
         'transform_celery': lambda e: {'logs_url': e['log_filepath']},
     },
     'local_received': {
-        'transform_celery': lambda e: {
-            # Note first_started is never overwritten by aggregation.
-            'first_started': e['local_received'],
-            'latest_timestamp': e['local_received'],
-        },
+        'transform_celery': _times_from_event,
     },
     'states': {'aggregate_merge': True},
     'exception_cause_uuid': {
@@ -274,7 +278,7 @@ class _FlameTask:
     def dump_full(self, new_event_types: set[str]):
         should_dump = (
             # dump when we receive args
-            {'task-started-info'}.intersection(new_event_types)
+            'task-started-info' in new_event_types
 
             # dump when the task is complete (or if it was already complete, regardless of event type, due to out-of-order events.)
             # FIXME: is_completed can cause double dumps for successes when completed is received after success.
@@ -954,7 +958,7 @@ class FlameEventAggregator:
             is_new = False
         return task, is_new
 
-    def _aggregate_event(self, event):
+    def _aggregate_event(self, event: dict[str, Any]):
         if (
             # The uuid can be null, it's unclear what this means but the event
             # can't be associated with a task so dropping is OK.
@@ -965,6 +969,8 @@ class FlameEventAggregator:
                 event['uuid'] not in self._tasks_by_uuid
                 and event.get('type') == RunStates.REVOKED.to_celery_event_type()
             )
+            # we use task-started-info now
+            or event.get('type') == 'task-started'
         ):
             return {}
 

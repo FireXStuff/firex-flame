@@ -176,6 +176,7 @@ class BrokerEventConsumerThread(threading.Thread):
             _log_event_received(event, self._event_count)
         self._event_count += 1
 
+
         self.flame_controller.update_graph_and_sio_clients([event])
 
         if (

@@ -2,7 +2,12 @@ import unittest
 
 from firex_flame.flame_task_graph import FlameEventAggregator, FlameTaskGraph, _TaskFieldSentile
 
-basic_event = {'uuid': '1', 'long_name': 'prefix.SomeTask', 'type': 'task-started', 'local_received': 0}
+basic_event = {
+    'uuid': '1',
+    'long_name': 'prefix.SomeTask',
+    'type': 'task-started-info',
+    'local_received': 0,
+}
 basic_event_added_fields = {
     'state': basic_event['type'],
     'task_num': 1,
@@ -14,6 +19,16 @@ basic_event_added_fields = {
     'states': [{'state': basic_event['type'], 'timestamp': basic_event['local_received']}],
 }
 
+def _norm_state(state: str):
+    return 'task-started' if state == 'task-started-info' else state
+
+
+def _to_expected_task(task: dict):
+    task['state'] = _norm_state(task['state'])
+    if 'states' in task:
+        for s in task['states']:
+            s['state'] = _norm_state(s['state'])
+    return task
 
 class EventAggregatorTests(unittest.TestCase):
 
@@ -22,7 +37,7 @@ class EventAggregatorTests(unittest.TestCase):
 
         aggregator.aggregate_events([basic_event])
 
-        expected_task = {**basic_event, **basic_event_added_fields}
+        expected_task = _to_expected_task(basic_event | basic_event_added_fields)
         expected_task.pop('local_received')
         self.assertEqual(
             {expected_task['uuid']: expected_task},
@@ -81,14 +96,18 @@ class EventAggregatorTests(unittest.TestCase):
         events = [
             event1,
             {'uuid': event1['uuid'], 'type': 'task-blocked', 'local_received': 1},
-            {'uuid': event1['uuid'], 'type': 'task-started', 'local_received': 2},
+            {'uuid': event1['uuid'], 'type': 'task-started-info', 'local_received': 2},
             {'uuid': event1['uuid'], 'type': 'task-succeeded', 'local_received': 3},
         ]
-
         aggregator.aggregate_events(events)
 
         aggregated_states = aggregator._tasks_by_uuid[event1['uuid']].get_field('states')
-        expected_states = [{'state': e['type'], 'timestamp': e['local_received']} for e in events]
+        expected_states = [
+            _to_expected_task({
+                'state': e['type'],
+                'timestamp': e['local_received']
+            })
+            for e in events]
         self.assertEqual(expected_states, aggregated_states)
 
     def test_capture_root(self):
@@ -102,21 +121,25 @@ class EventAggregatorTests(unittest.TestCase):
     def test_states_aggregated(self):
         aggregator = FlameEventAggregator({})
 
-        event2 = {**basic_event,
-                  'type': 'task-blocked',
-                  'local_received': 1,
-                  }
+        event2 = basic_event | dict(type='task-blocked', local_received=1)
 
         aggregator.aggregate_events([basic_event, event2])
         expected_states = [
-            {'state': basic_event['type'], 'timestamp': basic_event['local_received']},
-            {'state': event2['type'], 'timestamp': event2['local_received']},
+            _to_expected_task(
+                {'state': basic_event['type'], 'timestamp': basic_event['local_received']}
+            ),
+            _to_expected_task(
+                {'state': event2['type'], 'timestamp': event2['local_received']}
+            ),
         ]
-        self.assertEqual(expected_states, aggregator._tasks_by_uuid[basic_event['uuid']].get_field('states'))
+        self.assertEqual(
+            expected_states,
+            aggregator._tasks_by_uuid[basic_event['uuid']].get_field('states'),
+        )
 
     def test_aggregate_non_celery_field(self):
         aggregator = FlameEventAggregator({})
-        event1 = {**basic_event, 'url': 'some_url'}
+        event1 = basic_event | {'url': 'some_url'}
 
         aggregator.aggregate_events([event1])
         # The rule for the celery key 'url' creates a new key 'logs_url'. This test verifies non-celery keys are
@@ -137,7 +160,7 @@ class EventAggregatorTests(unittest.TestCase):
                 "timestamp": 1670605164.6179929, "type": "task-received", "local_received": 1670605164.6221592},
             {
                 "utcoffset": 8, "pid": 44987, "clock": 1, "uuid": "b954db0d-e308-4cd4-bcd9-dbbed3982067", "timestamp": 1670605164.6242092, "type": "task-started-info", "local_received": 1670605164.6256702},
-            {"uuid": "92b47986-7c9e-47b8-8949-bf3c047fd726", "timestamp": 1670605164.6301577, "type": "task-started", "local_received": 1670605164.6447308},
+            {"uuid": "92b47986-7c9e-47b8-8949-bf3c047fd726", "timestamp": 1670605164.6301577, "type": "task-started-info", "local_received": 1670605164.6447308},
             {"uuid": "b954db0d-e308-4cd4-bcd9-dbbed3982067", "timestamp": 1670605164.6375537, "type": "task-send-flame", 'flame_data': flame_data, "local_received": 1670605164.646939},
         ])
 
