@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Any, Union
+from typing import Optional, Any, Union, Callable
 import re
 from datetime import datetime
 import dataclasses
@@ -29,14 +29,30 @@ TASK_TYPE = dict[str, Any] # fixme should probably data model
 TASKS_BY_UUID_TYPE = dict[str, TASK_TYPE] # fixme should probably data model
 
 TASK_ARGS = 'firex_bound_args'
+_FIRST_STARTED_KEY = 'first_started'
+
+CeleryEvent = dict[str, Any]
 
 
 def _times_from_event(event: dict[str, Any]) -> dict:
     times = dict(latest_timestamp=event['local_received'])
     if event.get('type') == 'task-started-info':
         # Note first_started is never overwritten by aggregation.
-        times['first_started'] = event['local_received']
+        times['started_info_timestamp'] = event['local_received']
     return times
+
+
+def _update_first_started_from_started_info(
+    task: '_FlameTask',
+    started_info_timestamp,
+) -> dict[str, Any]:
+    updated_times = {}
+    # set first started time if its currently unset, or override with first
+    # task-started-info since some things (e.g. pauses) cause cause delays between
+    # first celery event and meaningful task start.
+    if task.get_field('retries', 0) == 0:
+        updated_times[_FIRST_STARTED_KEY] = started_info_timestamp
+    return updated_times
 
 
 # config field options:
@@ -119,6 +135,9 @@ FIELD_CONFIG = {
     'local_received': {
         'transform_celery': _times_from_event,
     },
+    'started_info_timestamp': {
+        'callback_update': _update_first_started_from_started_info,
+    },
     'states': {'aggregate_merge': True},
     'exception_cause_uuid': {
         'copy_celery': True,
@@ -161,12 +180,17 @@ COPY_FIELDS = _get_keys_with_true(FIELD_CONFIG, 'copy_celery')
 SLIM_FIELDS = _get_keys_with_true(FIELD_CONFIG, 'slim_field')
 
 AGGREGATE_MERGE_FIELDS = _get_keys_with_true(FIELD_CONFIG, 'aggregate_merge')
-AGGREGATE_KEEP_INITIAL_FIELDS = _get_keys_with_true(FIELD_CONFIG, 'aggregate_keep_initial')
-AGGREGATE_NO_OVERWRITE_FIELDS = AGGREGATE_MERGE_FIELDS + AGGREGATE_KEEP_INITIAL_FIELDS
+_FIELD_TO_CALLBACK_UPDATE : dict[str, Callable[['_FlameTask', CeleryEvent], dict[str, Any]]] = {
+    k: v['callback_update'] for k, v in FIELD_CONFIG.items()
+    if 'callback_update' in v
+}
+AGGREGATE_NO_OVERWRITE_FIELDS = AGGREGATE_MERGE_FIELDS + list(_FIELD_TO_CALLBACK_UPDATE)
 
 FIELD_TO_CELERY_TRANSFORMS = {
     k: v['transform_celery'] for k, v in FIELD_CONFIG.items()
-    if 'transform_celery' in v}
+    if 'transform_celery' in v
+}
+
 
 class _TaskFieldSentile(Enum):
     UNSET = 1
@@ -299,8 +323,11 @@ class _FlameTask:
                         if task_num % 100 == 0:
                             logger.debug(f'Unloaded big fields for task num {task_num}, uuid {self.get_uuid()}')
 
-    def get_task_state(self):
-        return self.always_loaded_task_data['state']
+    def get_task_state(self) -> Optional[RunStates]:
+        try:
+            return RunStates.create(self.always_loaded_task_data['state'])
+        except TypeError:
+            return None
 
     def is_complete(self) -> bool:
         return is_task_dict_complete(self.always_loaded_task_data)
@@ -310,9 +337,10 @@ class _FlameTask:
 
     def get_fields(self, field_names):
         if set(field_names).isdisjoint(self._modelled.unloadable_field_names()):
+            # no need to load unloaded data.
             task_dict = self.always_loaded_task_data
         else:
-            with self._lock:
+            with self._lock: # unloaded field requested
                 task_dict = self._already_locked_get_full_task_dict(field_names)
 
         return {
@@ -462,7 +490,7 @@ class FlameTaskGraph:
         task = self._tasks_by_uuid.get(self.root_uuid)
         if task is None:
             return False
-        return task.get_task_state() not in [None, RunStates.RECEIVED.to_celery_event_type()]
+        return task.get_task_state() not in [None, RunStates.RECEIVED]
 
     def is_root_complete(self) -> bool:
         task = self._tasks_by_uuid.get(self.root_uuid)
@@ -856,7 +884,7 @@ def _query_flame_tasks(task_graph: FlameTaskGraph, task_uuids_to_query, task_que
 
 
 # Event data extraction/transformation without current state context.
-def get_new_event_data(event):
+def _get_event_task_data(event: CeleryEvent) -> dict[str, Any]:
     new_task_data = {}
     for field in COPY_FIELDS:
         if field in event:
@@ -868,25 +896,31 @@ def get_new_event_data(event):
         if field in event:
             new_task_data.update(transform(event))
 
-    return {event['uuid']: new_task_data}
+    return new_task_data
 
-def find_data_changes(task: _FlameTask, new_task_data):
+
+def find_data_changes(
+    task: _FlameTask,
+    new_task_data: dict[str, Any],
+) -> dict[str, Any]:
     # Some fields overwrite whatever is present. Be permissive, since not all fields captured are from celery,
     # so not all have entries in the field config.
     override_dict = {
         k: v
         for k, v in new_task_data.items()
-        if k not in AGGREGATE_NO_OVERWRITE_FIELDS}
+        if k not in AGGREGATE_NO_OVERWRITE_FIELDS
+    }
 
     changed_data = {}
     for new_data_key, new_data_val in override_dict.items():
         if task.get_field(new_data_key) != new_data_val:
             changed_data[new_data_key] = new_data_val
 
-    # Some field updates are dropped if there is already a value for that field name (keep initial).
-    for no_overwrite_key in AGGREGATE_KEEP_INITIAL_FIELDS:
-        if no_overwrite_key in new_task_data and task.get_field(no_overwrite_key) == _TaskFieldSentile.UNSET:
-            changed_data[no_overwrite_key] = new_task_data[no_overwrite_key]
+    for field_name, callback_fn in _FIELD_TO_CALLBACK_UPDATE.items():
+        if field_name in new_task_data:
+            changed_data.update(
+                callback_fn(task, new_task_data[field_name])
+            )
 
     # Some fields need to be accumulated across events, not overwritten from latest event.
     merged_fields_to_values = {
@@ -949,7 +983,10 @@ class FlameEventAggregator:
 
     def _get_or_create_task(self, task_uuid) -> tuple[_FlameTask, bool]:
         if task_uuid not in self._tasks_by_uuid:
-            task = _FlameTask.create_task(task_uuid, self.new_task_num, self.model_dumper)
+            task = _FlameTask.create_task(
+                task_uuid,
+                self.new_task_num,
+                self.model_dumper)
             self.new_task_num += 1
             self._tasks_by_uuid[task_uuid] = task
             is_new = True
@@ -959,34 +996,30 @@ class FlameEventAggregator:
         return task, is_new
 
     def _aggregate_event(self, event: dict[str, Any]):
+        task_uuid: Optional[str] = event.get('uuid')
         if (
             # The uuid can be null, it's unclear what this means but the event
             # can't be associated with a task so dropping is OK.
-            not event.get('uuid')
+            not task_uuid
             # Revoked events can be sent before any other, and we'll never get any data (name, etc) for that task.
             # Therefore ignore events that are for a new UUID that have revoked type.
             or (
-                event['uuid'] not in self._tasks_by_uuid
+                task_uuid not in self._tasks_by_uuid
                 and event.get('type') == RunStates.REVOKED.to_celery_event_type()
             )
-            # we use task-started-info now
-            or event.get('type') == 'task-started'
         ):
             return {}
 
-        new_data_by_task_uuid = get_new_event_data(event)
-        changes_by_task_uuid = {}
-        for task_uuid, new_task_data in new_data_by_task_uuid.items():
-            task, is_new_task = self._get_or_create_task(task_uuid)
+        task, is_new_task = self._get_or_create_task(task_uuid)
+        new_task_data = _get_event_task_data(event)
+        changed_data = find_data_changes(task, new_task_data)
+        task.update(changed_data)
 
-            changed_data = find_data_changes(task, new_task_data)
-            task.update(changed_data)
-
+        return {
             # If we just created the task, we need to send the auto-initialized fields, as well as data from the event.
             # If this isn't a new event, we only need to send what has changed.
-            changes_by_task_uuid[task_uuid] = task.as_dict() if is_new_task else dict(changed_data)
-
-        return changes_by_task_uuid
+            task_uuid: task.as_dict() if is_new_task else changed_data
+        }
 
 
 class FlameModelDumper:
