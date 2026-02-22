@@ -42,10 +42,7 @@ def _times_from_event(event: dict[str, Any]) -> dict:
     return times
 
 
-def _update_first_started_from_started_info(
-    task: '_FlameTask',
-    started_info_timestamp,
-) -> dict[str, Any]:
+def _update_first_started_from_started_info(task: '_FlameTask', started_info_timestamp) -> dict[str, Any]:
     updated_times = {}
     # set first started time if its currently unset, or override with first
     # task-started-info since some things (e.g. pauses) cause cause delays between
@@ -54,11 +51,18 @@ def _update_first_started_from_started_info(
         updated_times[_FIRST_STARTED_KEY] = started_info_timestamp
     return updated_times
 
+def _update_first_started_from_latest_timestamp(task: '_FlameTask', latest_timestamp) -> dict[str, Any]:
+    updated_times = {}
+    # use latest timestamp if no started time is set.
+    if not task.get_field(_FIRST_STARTED_KEY):
+        updated_times[_FIRST_STARTED_KEY] = latest_timestamp
+    return updated_times
+
 
 # config field options:
 #   copy_celery - True if this field should be copied from the celery event to the task data model. If the field already
 #                   has a value on the data model, more recent celery field values will overwrite existing values by
-#                   default. If overwriting should be avoided, see 'aggregate_merge' and 'aggregate_keep_initial'
+#                   default. If overwriting should be avoided, see 'aggregate_merge' and 'callback_update'
 #                   options described below.
 #
 #   slim_field - True if this field should be included in the 'slim' (minimal) data model representation sent to the UI.
@@ -73,8 +77,9 @@ def _update_first_started_from_started_info(
 #   aggregate_merge - True if model updates should deep merge collection data types (lists, dicts, sets) instead of
 #                       overwriting.
 #
-#   aggregate_keep_initial - True if data model field updates should be ignored after an initial value has been set.
-#                               This is one way of preventing overwriting, see also 'aggregate_merge'.
+#   callback_update - A callback function that accepts a _FlameTask and the data field.
+#                     Can be used to update fields based on the current task state.
+#                     This is one way of preventing overwriting, see also 'aggregate_merge'.
 #
 #
 FIELD_CONFIG = {
@@ -123,7 +128,6 @@ FIELD_CONFIG = {
     },
     'first_started': {
         'slim_field': True,
-        'aggregate_keep_initial': True,
     },
     'url': {
         # TODO: only for backwards compat. Can use log_filepath.
@@ -161,6 +165,7 @@ FIELD_CONFIG = {
     },
     'latest_timestamp': {
         'slim_field': True,
+        'callback_update': _update_first_started_from_latest_timestamp,
     },
     'pid': {
         'copy_celery': True,
