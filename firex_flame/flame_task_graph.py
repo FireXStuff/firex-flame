@@ -51,8 +51,9 @@ def _update_first_started_from_started_info(task: '_FlameTask', started_info_tim
         updated_times[_FIRST_STARTED_KEY] = started_info_timestamp
     return updated_times
 
+
 def _update_first_started_from_latest_timestamp(task: '_FlameTask', latest_timestamp) -> dict[str, Any]:
-    updated_times = {}
+    updated_times = dict(latest_timestamp=latest_timestamp)
     # use latest timestamp if no started time is set.
     if not task.get_field(_FIRST_STARTED_KEY):
         updated_times[_FIRST_STARTED_KEY] = latest_timestamp
